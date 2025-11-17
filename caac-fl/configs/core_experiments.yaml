@@ -1,0 +1,228 @@
+# Core Experiment Configuration for CAAC-FL
+# Based on Protocol-CAAC-FL-Revised.md
+
+# General experiment settings
+experiment:
+  name: "caac_fl_core_experiments"
+  seed: 42
+  num_rounds: 100
+  checkpoint_frequency: 10
+  log_frequency: 1
+  device: "cuda"  # or "cpu"
+  
+# Dataset configurations
+datasets:
+  mimic:
+    name: "mimic"
+    data_dir: "data/mimic"
+    task: "mortality"  # ICU mortality prediction
+    train_split: 0.7
+    val_split: 0.1
+    test_split: 0.2
+    
+  isic:
+    name: "isic"
+    data_dir: "data/isic"
+    task: "melanoma"  # Binary: melanoma vs non-melanoma
+    train_split: 0.7
+    val_split: 0.1
+    test_split: 0.2
+
+# Model configurations
+models:
+  mimic:
+    name: "mlp"
+    hidden_layers: [128, 64]
+    dropout: 0.2
+    input_dim: 48  # Number of features
+    output_dim: 1  # Binary classification
+    
+  isic:
+    name: "resnet18"
+    pretrained: true
+    num_classes: 1  # Binary classification
+    
+# Federated learning settings
+federation:
+  num_clients: 20
+  clients_per_round: 20  # Full participation for core experiments
+  
+  # Data heterogeneity (Dirichlet distribution)
+  heterogeneity:
+    mild:
+      alpha: 1.0
+    extreme:
+      alpha: 0.1
+  
+  # Client data size distribution (power law)
+  data_distribution:
+    type: "power_law"
+    min_samples: 50
+    max_samples: 1000
+    
+# Training settings
+training:
+  local_epochs: 5
+  batch_size: 32
+  learning_rate: 0.001
+  optimizer: "adam"
+  weight_decay: 0.0001
+  
+# Aggregator configurations
+aggregators:
+  fedavg:
+    name: "fedavg"
+    
+  krum:
+    name: "krum"
+    num_byzantine: 4  # For 20% Byzantine with 20 clients
+    num_selected: 1
+    
+  fltrust:
+    name: "fltrust"
+    root_dataset_size: 100
+    
+  caac_fl:
+    name: "caac_fl"
+    # Canonical CAAC-FL parameters from protocol
+    beta: 0.9  # EWMA decay
+    gamma: 0.1  # Reliability smoothing
+    lambda_mag: 0.4  # Magnitude anomaly weight
+    lambda_dir: 0.4  # Direction anomaly weight
+    lambda_temp: 0.2  # Temporal anomaly weight
+    tau_anomaly: 2.0  # Anomaly threshold
+    f_min: 0.25  # Min threshold scale
+    f_max: 2.0  # Max threshold scale
+    alpha: 0.5  # Anomaly impact
+    delta: 0.5  # Reliability impact
+    eta_w: 0.5  # Weight scaling
+    bootstrap_rounds: 10
+    
+# Byzantine attack configurations
+attacks:
+  none:
+    type: "none"
+    
+  sign_flip:
+    type: "sign_flip"
+    scale: 10.0
+    
+  alie:
+    type: "alie"
+    z_score: 2.5
+    num_byzantine: 4
+    
+  slow_drift:
+    type: "slow_drift"
+    start_round: 20
+    end_round: 50
+    
+# Byzantine client settings
+byzantine:
+  proportions: [0.0, 0.2]  # 0% and 20% Byzantine
+  selection: "random"  # How to select Byzantine clients
+  
+# Core experiment matrix (from protocol Section 4.1)
+core_experiments:
+  # H1: Heterogeneity Preservation (Clean)
+  h1_experiments:
+    - dataset: "mimic"
+      aggregators: ["fedavg", "krum", "fltrust", "caac_fl"]
+      heterogeneity: ["mild", "extreme"]
+      byzantine_fraction: 0.0
+      attack: "none"
+      seeds: [42, 43, 44]
+      
+    - dataset: "isic"
+      aggregators: ["fedavg", "krum", "fltrust", "caac_fl"]
+      heterogeneity: ["mild", "extreme"]
+      byzantine_fraction: 0.0
+      attack: "none"
+      seeds: [42, 43, 44]
+  
+  # H2: Robustness under extreme non-IID
+  h2_experiments:
+    - dataset: "mimic"
+      aggregators: ["fedavg", "krum", "fltrust", "caac_fl"]
+      heterogeneity: "extreme"
+      byzantine_fraction: 0.2
+      attacks: ["sign_flip", "alie"]
+      seeds: [42, 43, 44]
+      
+    - dataset: "isic"
+      aggregators: ["fedavg", "krum", "fltrust", "caac_fl"]
+      heterogeneity: "extreme"
+      byzantine_fraction: 0.2
+      attacks: ["sign_flip", "alie"]
+      seeds: [42, 43, 44]
+  
+  # H3: Temporal Discrimination
+  h3_experiments:
+    - dataset: "mimic"
+      aggregators: ["fedavg", "fltrust", "caac_fl"]
+      heterogeneity: "extreme"
+      byzantine_fraction: 0.2
+      attack: "slow_drift"
+      seeds: [42, 43, 44]
+      
+    - dataset: "isic"
+      aggregators: ["fedavg", "fltrust", "caac_fl"]
+      heterogeneity: "extreme"
+      byzantine_fraction: 0.2
+      attack: "slow_drift"
+      seeds: [42, 43, 44]
+
+# Evaluation metrics
+metrics:
+  binary_classification:
+    - "auroc"
+    - "auprc"
+    - "accuracy"
+    - "f1"
+    - "sensitivity"
+    - "specificity"
+    
+  convergence:
+    - "rounds_to_90_percent"
+    - "final_performance"
+    - "stability"
+    
+  detection:  # For CAAC-FL
+    - "benign_fpr"
+    - "malicious_tpr"
+    - "detection_latency"
+    
+  computational:
+    - "aggregation_time"
+    - "memory_usage"
+    
+# Output settings
+output:
+  results_dir: "results"
+  plots_dir: "results/plots"
+  checkpoints_dir: "checkpoints"
+  logs_dir: "logs"
+  
+  # What to save
+  save_model_checkpoints: true
+  save_client_profiles: true  # For CAAC-FL
+  save_per_round_metrics: true
+  save_final_model: true
+  
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/experiment.log"
+  console: true
+  
+  # Weights & Biases (optional)
+  wandb:
+    enabled: false
+    project: "caac-fl"
+    entity: null  # Your W&B username/team
+    
+  # TensorBoard (optional)
+  tensorboard:
+    enabled: true
+    log_dir: "logs/tensorboard"
