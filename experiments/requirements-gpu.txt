@@ -1,0 +1,16 @@
+# CAAC-FL Experiments - GPU Installation
+# For systems with CUDA GPU support
+# Python 3.8+ required
+# Requires NVIDIA CUDA 11.8 or 12.1
+
+# Install PyTorch with CUDA support first
+# For CUDA 11.8:
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch>=2.0.0
+torchvision>=0.15.0
+
+# For CUDA 12.1, replace the index-url above with:
+# --extra-index-url https://download.pytorch.org/whl/cu121
+
+# Then install other dependencies
+-r requirements.txt

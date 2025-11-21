@@ -1,0 +1,11 @@
+# CAAC-FL Experiments - CPU-only Installation
+# For systems without CUDA GPU support
+# Python 3.8+ required
+
+# Install PyTorch CPU version first
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Then install other dependencies
+-r requirements.txt

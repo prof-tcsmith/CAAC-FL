@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Archives
+*.tar
+*.tar.gz
+*.zip
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs (keep experiment logs)
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model checkpoints (if large)
+*.pth
+*.pt
+*.h5
+*.ckpt
+
+# Datasets
+**/cifar-10-batches-py/
+**/data/cifar-10-batches-py/
