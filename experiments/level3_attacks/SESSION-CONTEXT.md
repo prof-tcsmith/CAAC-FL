@@ -190,3 +190,19 @@ When picking up this work:
 3. The user chose Option 2 (scale to 50 clients) from three options
 4. We need to complete all 12 experiments and compare with 15-client baseline
 5. Focus is on Byzantine-robust aggregation methods under attacks
+
+## Future Work (Level 4 & 5)
+
+After completing Level 3, see:
+- `../LEVEL4-LEVEL5-IMPLEMENTATION-GUIDE.md` - Complete implementation guide
+- `../EXPERIMENT-PLAN.md` - Full 5-level experimental progression plan
+
+Level 4 will add:
+- ALIE attacks (variance-based stealthy)
+- Simple behavioral tracking (prototype)
+- Detection metrics (TPR, FPR)
+
+Level 5 will implement:
+- Full CAAC-FL with multi-dimensional anomaly detection
+- Client-specific adaptive thresholds
+- Trust score system with reliability tracking
