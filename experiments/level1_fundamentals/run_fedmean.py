@@ -1,5 +1,6 @@
 """
-Run Level 1 experiment with FedAvg aggregation.
+Run Level 1 experiment with FedMean aggregation.
+FedMean uses unweighted averaging (simple mean) as opposed to FedAvg's weighted averaging.
 """
 
 import sys
@@ -7,27 +8,27 @@ import os
 import argparse
 import time
 from datetime import timedelta
-import warnings
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 # Suppress PyTorch pin_memory deprecation warnings (from PyTorch internals)
+import warnings
 warnings.filterwarnings('ignore', category=DeprecationWarning, module='torch.utils.data')
 
 import torch
 import numpy as np
 import flwr as fl
-from flwr.server.strategy import FedAvg
 from torch.utils.data import DataLoader
 
 from shared.data_utils import load_cifar10, partition_data_iid, create_dataloaders
 from shared.models import SimpleCNN
 from shared.metrics import MetricsLogger, evaluate_model
 from client import create_client_fn
+from fedmean_strategy import FedMean
 
 
 def parse_args():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description='Level 1: FedAvg with IID Data')
+    parser = argparse.ArgumentParser(description='Level 1: FedMean with IID Data')
     parser.add_argument('--num_clients', type=int, default=50, help='Total number of clients')
     parser.add_argument('--num_rounds', type=int, default=50, help='Number of rounds')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
@@ -38,7 +39,7 @@ def main():
     args = parse_args()
 
     print("=" * 60)
-    print("Level 1: Federated Learning with FedAvg")
+    print("Level 1: Federated Learning with FedMean")
     print("=" * 60)
 
     # Configuration
@@ -106,7 +107,7 @@ def main():
     # Initialize metrics logger
     logger = MetricsLogger(
         log_dir='./results',
-        experiment_name='level1_fedavg'
+        experiment_name='level1_fedmean'
     )
 
     # Track experiment start time
@@ -166,8 +167,8 @@ def main():
 
         return aggregated_metrics
 
-    # Configure strategy
-    strategy = FedAvg(
+    # Configure strategy (FedMean)
+    strategy = FedMean(
         fraction_fit=1.0,  # All clients participate
         fraction_evaluate=0.0,  # No client-side evaluation
         min_fit_clients=NUM_CLIENTS,
@@ -218,7 +219,7 @@ def main():
     print(f"\nFinal Results:")
     print(f"  Test Accuracy: {final_acc:.2f}%")
     print(f"  Test Loss: {final_loss:.4f}")
-    print(f"  Results saved to: ./results/level1_fedavg_metrics.*")
+    print(f"  Results saved to: ./results/level1_fedmean_metrics.*")
 
     return history
 

@@ -8,9 +8,16 @@ Tests trimmed mean robustness (removes top/bottom 20% per coordinate).
 import sys
 import os
 import argparse
+import time
+from datetime import timedelta
 import torch
 from torch.utils.data import DataLoader
 import flwr as fl
+from flwr.common import Context
+
+# Suppress PyTorch pin_memory deprecation warnings (from PyTorch internals)
+import warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='torch.utils.data')
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -101,12 +108,13 @@ def main():
     print(f"\nByzantine clients: {byzantine_clients}")
 
     # Create test dataloader (shared)
-    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
 
     # Client function factory
-    def client_fn(cid: str):
+    def client_fn(context: Context):
         """Create a client instance"""
-        client_id = int(cid)
+        # Extract client ID from context (partition-id for simulation mode)
+        client_id = int(context.node_config.get("partition-id", context.node_id))
         is_byzantine = client_id in byzantine_clients
 
         # Create attack if Byzantine
@@ -122,7 +130,8 @@ def main():
         train_loader = DataLoader(
             train_dataset,
             batch_size=BATCH_SIZE,
-            sampler=torch.utils.data.SubsetRandomSampler(client_indices)
+            sampler=torch.utils.data.SubsetRandomSampler(client_indices),
+            num_workers=4
         )
 
         return create_client(
@@ -134,7 +143,7 @@ def main():
             attack=attack,
             local_epochs=LOCAL_EPOCHS,
             learning_rate=LEARNING_RATE,
-        )
+        ).to_client()
 
     # Initialize metrics logger
     attack_suffix = f"_{args.attack}" if args.attack != 'none' else "_no_attack"
@@ -152,6 +161,9 @@ def main():
         attack_type=args.attack,
     )
 
+    # Track experiment start time
+    experiment_start_time = time.time()
+
     # Create server evaluation function
     def evaluate_fn(server_round, parameters, config):
         """Centralized evaluation function"""
@@ -164,8 +176,6 @@ def main():
         accuracy = result['accuracy']
         loss = result['loss']
 
-        print(f"Round {server_round}: Test Accuracy = {accuracy:.2f}%, Test Loss = {loss:.4f}")
-
         # Log metrics
         logger.log_round(
             round_num=server_round,
@@ -173,7 +183,36 @@ def main():
             test_loss=loss
         )
 
+        # Calculate timing information
+        elapsed_time = time.time() - experiment_start_time
+        elapsed_str = str(timedelta(seconds=int(elapsed_time)))
+
+        if server_round > 0:
+            avg_time_per_round = elapsed_time / server_round
+            remaining_rounds = NUM_ROUNDS - server_round
+            estimated_remaining = avg_time_per_round * remaining_rounds
+            remaining_str = str(timedelta(seconds=int(estimated_remaining)))
+            total_estimated = str(timedelta(seconds=int(elapsed_time + estimated_remaining)))
+
+            print(f"Round {server_round}/{NUM_ROUNDS}: Acc={accuracy:.2f}%, Loss={loss:.4f} | "
+                  f"Elapsed: {elapsed_str}, Remaining: ~{remaining_str}, Total: ~{total_estimated}")
+        else:
+            print(f"Round {server_round}: Test Accuracy = {accuracy:.2f}%, Test Loss = {loss:.4f}")
+
         return loss, {"accuracy": accuracy}
+
+    # Define metrics aggregation function
+    def fit_metrics_aggregation_fn(metrics):
+        """Aggregate fit metrics from clients (weighted average)."""
+        if not metrics:
+            return {}
+        # Weighted average based on number of examples
+        total_examples = sum([num_examples for num_examples, _ in metrics])
+        aggregated_metrics = {}
+        for metric_name in ['loss', 'client_id', 'is_byzantine']:
+            weighted_sum = sum([m.get(metric_name, 0) * num_examples for num_examples, m in metrics])
+            aggregated_metrics[metric_name] = weighted_sum / total_examples if total_examples > 0 else 0
+        return aggregated_metrics
 
     # Configure strategy (Trimmed Mean)
     strategy = TrimmedMean(
@@ -184,10 +223,21 @@ def main():
         min_evaluate_clients=NUM_CLIENTS,
         min_available_clients=NUM_CLIENTS,
         evaluate_fn=evaluate_fn,
+        fit_metrics_aggregation_fn=fit_metrics_aggregation_fn,
     )
+
+    # Configure Ray for better resource management
+    ray_init_args = {
+        "include_dashboard": False,
+        "num_cpus": 128,
+        "num_gpus": 2,
+        "_memory": 50 * 1024 * 1024 * 1024,  # 50GB system memory
+        "object_store_memory": 100 * 1024 * 1024 * 1024,  # 100GB object store
+    }
 
     # Start simulation
     print(f"\nStarting Trimmed Mean simulation ({NUM_ROUNDS} rounds)...")
+    print(f"  Ray config: {ray_init_args}")
     print("=" * 70)
 
     fl.simulation.start_simulation(
@@ -195,7 +245,8 @@ def main():
         num_clients=NUM_CLIENTS,
         config=fl.server.ServerConfig(num_rounds=NUM_ROUNDS),
         strategy=strategy,
-        client_resources={"num_cpus": 1, "num_gpus": 0.0},
+        client_resources={"num_cpus": 1, "num_gpus": 0.04 if DEVICE.type == "cuda" else 0.0},
+        ray_init_args=ray_init_args
     )
 
     # Save final results

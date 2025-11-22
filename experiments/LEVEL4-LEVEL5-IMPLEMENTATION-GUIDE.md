@@ -600,7 +600,7 @@ level5_caacfl/
 
 ## Next Steps After Level 3
 
-1. Complete Level 3 with 50 clients
+1. Complete Level 3 with 30 clients
 2. Analyze if Krum and Trimmed Mean recovered
 3. Begin Level 4 implementation (prototype behavioral tracking)
 4. Use Level 4 results to inform Level 5 hyperparameters

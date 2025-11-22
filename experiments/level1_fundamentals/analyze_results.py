@@ -28,10 +28,10 @@ def plot_comparison(metrics_dict, save_path='./results/level1_comparison.png'):
         save_path: Path to save the plot
     """
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    fig.suptitle('Level 1: FedAvg vs FedMedian Comparison (IID Data)', fontsize=16)
+    fig.suptitle('Level 1: FedAvg vs FedMean vs FedMedian Comparison (IID Data)', fontsize=16)
 
-    colors = ['#2E86AB', '#A23B72', '#F18F01']
-    markers = ['o', 's', '^']
+    colors = ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D']
+    markers = ['o', 's', '^', 'd']
 
     # Plot 1: Test Accuracy
     ax = axes[0, 0]
@@ -142,7 +142,7 @@ def plot_comparison(metrics_dict, save_path='./results/level1_comparison.png'):
 def print_summary(metrics_dict):
     """Print summary statistics."""
     print("\n" + "=" * 70)
-    print("LEVEL 1 SUMMARY: FedAvg vs FedMedian (IID Data)")
+    print("LEVEL 1 SUMMARY: FedAvg vs FedMean vs FedMedian (IID Data)")
     print("=" * 70)
 
     for name, metrics in metrics_dict.items():
@@ -162,21 +162,28 @@ def print_summary(metrics_dict):
             print(f"  Rounds to 70% accuracy: Did not reach")
 
     # Comparison
-    if len(metrics_dict) == 2:
+    if len(metrics_dict) >= 2:
         names = list(metrics_dict.keys())
-        acc_diff = metrics_dict[names[0]]['test_accuracy'][-1] - metrics_dict[names[1]]['test_accuracy'][-1]
-        print(f"\nAccuracy Difference ({names[0]} - {names[1]}): {acc_diff:+.2f}%")
+        print("\nPairwise Comparisons:")
 
-        if abs(acc_diff) < 1.0:
-            print("  → Similar performance (as expected with IID data, no attacks)")
-        elif acc_diff > 0:
-            print(f"  → {names[0]} performed slightly better")
-        else:
-            print(f"  → {names[1]} performed slightly better")
+        # Compare each pair
+        for i in range(len(names)):
+            for j in range(i+1, len(names)):
+                acc_diff = metrics_dict[names[i]]['test_accuracy'][-1] - metrics_dict[names[j]]['test_accuracy'][-1]
+                print(f"  {names[i]} - {names[j]}: {acc_diff:+.2f}%")
+                if abs(acc_diff) < 1.0:
+                    print(f"    → Similar performance")
+                elif acc_diff > 0:
+                    print(f"    → {names[i]} performed slightly better")
+                else:
+                    print(f"    → {names[j]} performed slightly better")
 
     print("\n" + "=" * 70)
     print("\nKey Observations:")
-    print("  - Both methods should achieve similar accuracy (~75-80%) with IID data")
+    print("  - All methods should achieve similar accuracy (~75-80%) with IID data")
+    print("  - FedAvg uses weighted averaging (by number of samples)")
+    print("  - FedMean uses unweighted averaging (simple mean)")
+    print("  - FedMedian uses coordinate-wise median")
     print("  - This validates the experimental setup before introducing attacks")
     print("  - Slight differences may be due to randomness in training")
     print("=" * 70 + "\n")
@@ -189,6 +196,7 @@ def main():
     # Load metrics
     experiments = {
         'FedAvg': 'level1_fedavg',
+        'FedMean': 'level1_fedmean',
         'FedMedian': 'level1_fedmedian'
     }
 

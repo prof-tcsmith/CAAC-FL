@@ -6,12 +6,17 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
+# Suppress PyTorch pin_memory deprecation warnings (from PyTorch internals)
+import warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='torch.utils.data')
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Subset
 import flwr as fl
+from flwr.common import Context
 from collections import OrderedDict
 from typing import Dict, List, Tuple
 
@@ -164,9 +169,10 @@ def create_client_fn(
     Returns:
         Client factory function
     """
-    def client_fn(cid: str) -> CifarClient:
+    def client_fn(context: Context):
         """Return a client instance for the given client ID."""
-        client_id = int(cid)
+        # Extract client ID from context (partition-id for simulation mode)
+        client_id = int(context.node_config.get("partition-id", context.node_id))
         return CifarClient(
             cid=client_id,
             train_loader=train_loaders[client_id],
@@ -174,6 +180,6 @@ def create_client_fn(
             device=device,
             learning_rate=learning_rate,
             local_epochs=local_epochs
-        )
+        ).to_client()
 
     return client_fn

@@ -11,7 +11,7 @@ dependencies:
   # Deep Learning (PyTorch from pytorch channel for optimal performance)
   - pytorch>=2.0.0
   - torchvision>=0.15.0
-  - cpuonly  # Remove this line if you have CUDA GPU and want GPU support
+  - pytorch-cuda=12.1  # CUDA 12.1 support (change to 11.8 if needed)
 
   # Numerical Computing
   - numpy>=1.24.0,<2.0.0

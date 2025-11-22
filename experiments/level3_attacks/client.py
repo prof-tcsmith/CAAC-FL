@@ -5,6 +5,10 @@ This client implementation supports both honest and Byzantine behavior,
 allowing simulation of attacks in federated learning.
 """
 
+# Suppress PyTorch pin_memory deprecation warnings (from PyTorch internals)
+import warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='torch.utils.data')
+
 from typing import Dict, Optional
 import torch
 import torch.nn as nn

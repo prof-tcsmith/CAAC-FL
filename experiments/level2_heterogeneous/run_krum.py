@@ -4,7 +4,14 @@ Run Level 2 experiment with Krum aggregation on non-IID data.
 
 import sys
 import os
+import argparse
+import time
+from datetime import timedelta
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+# Suppress PyTorch pin_memory deprecation warnings (from PyTorch internals)
+import warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='torch.utils.data')
 
 import torch
 import numpy as np
@@ -23,21 +30,33 @@ from client import create_client_fn
 from krum_strategy import Krum
 
 
+def parse_args():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description='Level 2: Krum with Non-IID Data')
+    parser.add_argument('--num_clients', type=int, default=50, help='Total number of clients')
+    parser.add_argument('--num_rounds', type=int, default=50, help='Number of rounds')
+    parser.add_argument('--alpha', type=float, default=0.5, help='Dirichlet alpha for non-IID data')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+
     print("=" * 60)
-    print("Level 2: Krum with Non-IID Data (Dirichlet α=0.5)")
+    print(f"Level 2: Krum with Non-IID Data (Dirichlet α={args.alpha})")
     print("=" * 60)
 
     # Configuration
-    NUM_CLIENTS = 10
-    NUM_ROUNDS = 50
+    NUM_CLIENTS = args.num_clients
+    NUM_ROUNDS = args.num_rounds
     BATCH_SIZE = 32
     LEARNING_RATE = 0.01
-    LOCAL_EPOCHS = 1
-    DIRICHLET_ALPHA = 0.5
+    LOCAL_EPOCHS = 5  # Increased for consistency with Levels 1 & 3
+    DIRICHLET_ALPHA = args.alpha
     NUM_BYZANTINE = 0  # No attacks in Level 2
-    SEED = 42
-    DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+    SEED = args.seed
+    DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     print(f"\nConfiguration:")
     print(f"  Clients: {NUM_CLIENTS}")
@@ -83,14 +102,14 @@ def main():
         train_dataset,
         client_dict,
         batch_size=BATCH_SIZE,
-        num_workers=2
+        num_workers=4  # Increased for better data loading performance
     )
 
     test_loader = DataLoader(
         test_dataset,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=2
+        num_workers=4  # Increased for better data loading performance
     )
 
     # Create client factory
@@ -119,6 +138,9 @@ def main():
         class_imbalance=stats['heterogeneity_metrics']['mean_class_imbalance']
     )
 
+    # Track experiment start time
+    experiment_start_time = time.time()
+
     # Define evaluation function
     def evaluate_fn(server_round: int, parameters, config):
         """Centralized evaluation function."""
@@ -142,9 +164,36 @@ def main():
             test_loss=results['loss']
         )
 
-        print(f"Round {server_round}: Test Accuracy = {results['accuracy']:.2f}%, Test Loss = {results['loss']:.4f}")
+        # Calculate timing information
+        elapsed_time = time.time() - experiment_start_time
+        elapsed_str = str(timedelta(seconds=int(elapsed_time)))
+
+        if server_round > 0:
+            avg_time_per_round = elapsed_time / server_round
+            remaining_rounds = NUM_ROUNDS - server_round
+            estimated_remaining = avg_time_per_round * remaining_rounds
+            remaining_str = str(timedelta(seconds=int(estimated_remaining)))
+            total_estimated = str(timedelta(seconds=int(elapsed_time + estimated_remaining)))
+
+            print(f"Round {server_round}/{NUM_ROUNDS}: Acc={results['accuracy']:.2f}%, Loss={results['loss']:.4f} | "
+                  f"Elapsed: {elapsed_str}, Remaining: ~{remaining_str}, Total: ~{total_estimated}")
+        else:
+            print(f"Round {server_round}: Test Accuracy = {results['accuracy']:.2f}%, Test Loss = {results['loss']:.4f}")
 
         return results['loss'], {'accuracy': results['accuracy']}
+
+    # Define metrics aggregation function
+    def fit_metrics_aggregation_fn(metrics):
+        """Aggregate fit metrics from clients (weighted average)."""
+        # Weighted average based on number of examples
+        total_examples = sum([num_examples for num_examples, _ in metrics])
+
+        aggregated_metrics = {}
+        for metric_name in ['train_loss', 'train_accuracy']:
+            weighted_sum = sum([m.get(metric_name, 0) * num_examples for num_examples, m in metrics])
+            aggregated_metrics[metric_name] = weighted_sum / total_examples if total_examples > 0 else 0
+
+        return aggregated_metrics
 
     # Configure Krum strategy
     strategy = Krum(
@@ -154,14 +203,25 @@ def main():
         min_evaluate_clients=0,
         min_available_clients=NUM_CLIENTS,
         evaluate_fn=evaluate_fn,
+        fit_metrics_aggregation_fn=fit_metrics_aggregation_fn,
         initial_parameters=fl.common.ndarrays_to_parameters(
             [val.cpu().numpy() for _, val in model.state_dict().items()]
         ),
         num_byzantine=NUM_BYZANTINE
     )
 
+    # Configure Ray for better resource management
+    ray_init_args = {
+        "include_dashboard": False,
+        "num_cpus": 128,
+        "num_gpus": 2,
+        "_memory": 50 * 1024 * 1024 * 1024,  # 50GB system memory
+        "object_store_memory": 100 * 1024 * 1024 * 1024,  # 100GB object store
+    }
+
     # Start simulation
     print("\nStarting federated learning simulation...")
+    print(f"  Ray config: {ray_init_args}")
     print("-" * 60)
 
     history = fl.simulation.start_simulation(
@@ -169,7 +229,8 @@ def main():
         num_clients=NUM_CLIENTS,
         config=fl.server.ServerConfig(num_rounds=NUM_ROUNDS),
         strategy=strategy,
-        client_resources={'num_cpus': 1, 'num_gpus': 0.1 if DEVICE == 'cuda' else 0}
+        client_resources={'num_cpus': 1, 'num_gpus': 0.04 if DEVICE.type == 'cuda' else 0},
+        ray_init_args=ray_init_args
     )
 
     print("-" * 60)

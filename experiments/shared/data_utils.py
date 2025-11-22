@@ -2,6 +2,10 @@
 Data loading and partitioning utilities.
 """
 
+# Suppress PyTorch pin_memory deprecation warnings (from PyTorch internals)
+import warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='torch.utils.data')
+
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, Subset
@@ -269,7 +273,9 @@ def create_dataloaders(dataset, client_dict, batch_size=32, num_workers=2):
             batch_size=batch_size,
             shuffle=True,
             num_workers=num_workers,
-            pin_memory=True
+            pin_memory=False,  # Disabled to avoid PyTorch deprecation warnings
+            persistent_workers=True if num_workers > 0 else False,  # Keep workers alive
+            prefetch_factor=2 if num_workers > 0 else None,  # Prefetch 2 batches per worker
         )
         dataloaders[client_id] = loader
 

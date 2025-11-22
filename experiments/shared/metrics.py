@@ -2,6 +2,10 @@
 Shared metrics and evaluation utilities.
 """
 
+# Suppress PyTorch pin_memory deprecation warnings (from PyTorch internals)
+import warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='torch.utils.data')
+
 import numpy as np
 import torch
 import torch.nn as nn
