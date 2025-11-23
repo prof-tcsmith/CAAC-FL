@@ -76,6 +76,62 @@ def partition_data_iid(dataset, num_clients, seed=42):
     return client_dict
 
 
+def partition_data_iid_unequal(dataset, num_clients, size_variation=0.5, seed=42):
+    """
+    Partition dataset into IID subsets with unequal sizes.
+
+    Data is randomly distributed (IID) but clients have different dataset sizes.
+    This tests FedAvg's weighting advantage vs unweighted FedMean.
+
+    Args:
+        dataset: PyTorch dataset
+        num_clients: Number of clients
+        size_variation: Controls size heterogeneity
+                        0.5 = moderate variation (sizes: 0.5x to 1.5x average)
+                        1.0 = high variation (sizes: near 0x to 2.0x average)
+        seed: Random seed for reproducibility
+
+    Returns:
+        dict: {client_id: list of indices}
+
+    Example:
+        For 50k samples, 50 clients, variation=0.5:
+        - Average: 1000 samples/client
+        - Range: ~500 to ~1500 samples/client
+    """
+    np.random.seed(seed)
+    num_items = len(dataset)
+
+    # Generate random size proportions using Dirichlet distribution
+    # Lower alpha = more heterogeneous sizes
+    # Higher alpha = more homogeneous sizes
+    alpha_param = 1.0 / size_variation
+    concentration = np.ones(num_clients) * alpha_param
+    size_proportions = np.random.dirichlet(concentration)
+
+    # Convert proportions to actual sizes
+    client_sizes = (size_proportions * num_items).astype(int)
+
+    # Adjust last client to ensure sum equals total
+    client_sizes[-1] = num_items - client_sizes[:-1].sum()
+
+    # Ensure no client has zero samples
+    client_sizes = np.maximum(client_sizes, 1)
+
+    # Randomly shuffle all indices (IID property)
+    indices = np.random.permutation(num_items)
+
+    # Partition indices according to sizes
+    client_dict = {}
+    start_idx = 0
+    for client_id in range(num_clients):
+        end_idx = start_idx + client_sizes[client_id]
+        client_dict[client_id] = indices[start_idx:end_idx].tolist()
+        start_idx = end_idx
+
+    return client_dict
+
+
 def partition_data_dirichlet(dataset, num_clients, alpha=0.5, seed=42):
     """
     Partition dataset into non-IID subsets using Dirichlet distribution.

@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument('--num_rounds', type=int, default=50, help='Number of rounds')
     parser.add_argument('--alpha', type=float, default=0.5, help='Dirichlet alpha for non-IID data')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--output_dir', type=str, default='./results', help='Output directory for results')
     return parser.parse_args()
 
 
@@ -126,9 +127,10 @@ def main():
     criterion = torch.nn.CrossEntropyLoss()
 
     # Initialize metrics logger
+    os.makedirs(args.output_dir, exist_ok=True)
     logger = MetricsLogger(
-        log_dir='./results',
-        experiment_name='level2_krum'
+        log_dir=args.output_dir,
+        experiment_name=f'level2_noniid_krum_a{args.alpha}_c{NUM_CLIENTS}'
     )
 
     # Log heterogeneity metrics
@@ -196,6 +198,7 @@ def main():
         return aggregated_metrics
 
     # Configure Krum strategy
+    # Note: Krum doesn't support fit_metrics_aggregation_fn parameter
     strategy = Krum(
         fraction_fit=1.0,
         fraction_evaluate=0.0,
@@ -203,7 +206,6 @@ def main():
         min_evaluate_clients=0,
         min_available_clients=NUM_CLIENTS,
         evaluate_fn=evaluate_fn,
-        fit_metrics_aggregation_fn=fit_metrics_aggregation_fn,
         initial_parameters=fl.common.ndarrays_to_parameters(
             [val.cpu().numpy() for _, val in model.state_dict().items()]
         ),

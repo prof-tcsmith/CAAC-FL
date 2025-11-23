@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument('--num_rounds', type=int, default=50, help='Number of rounds')
     parser.add_argument('--alpha', type=float, default=0.5, help='Dirichlet alpha for non-IID data')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--output_dir', type=str, default='./results', help='Output directory for results')
     return parser.parse_args()
 
 
@@ -124,9 +125,11 @@ def main():
     criterion = torch.nn.CrossEntropyLoss()
 
     # Initialize metrics logger
+    os.makedirs(args.output_dir, exist_ok=True)
+    experiment_name = f'level2_noniid_fedavg_a{args.alpha}_c{NUM_CLIENTS}'
     logger = MetricsLogger(
-        log_dir='./results',
-        experiment_name='level2_fedavg'
+        log_dir=args.output_dir,
+        experiment_name=experiment_name
     )
 
     # Log heterogeneity metrics

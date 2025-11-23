@@ -1,0 +1,40 @@
+{
+  "rounds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "train_loss": [],
+  "train_accuracy": [],
+  "test_accuracy": [],
+  "test_loss": [],
+  "metrics": [
+    {
+      "test_accuracy": 8.6,
+      "test_loss": 2.30501694191759
+    },
+    {
+      "test_accuracy": 45.86,
+      "test_loss": 1.8013409718918725
+    },
+    {
+      "test_accuracy": 60.99,
+      "test_loss": 1.1592667858821515
+    },
+    {
+      "test_accuracy": 66.12,
+      "test_loss": 0.992204068377376
+    },
+    {
+      "test_accuracy": 69.52,
+      "test_loss": 0.8982791590233581
+    },
+    {
+      "test_accuracy": 71.11,
+      "test_loss": 0.8449908249294416
+    }
+  ]
+}

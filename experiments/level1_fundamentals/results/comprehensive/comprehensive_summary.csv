@@ -1,0 +1,10 @@
+Partition,Aggregation,Clients,Final Accuracy
+IID-Equal,Fedmedian,10,78.54
+IID-Unequal,Fedavg,50,72.98
+IID-Unequal,Fedmean,50,70.97
+IID-Equal,Fedavg,10,78.84
+IID-Equal,Fedmean,10,78.47
+IID-Unequal,Fedmedian,50,68.27
+IID-Equal,Fedavg,25,75.58
+IID-Equal,Fedmedian,25,75.02
+IID-Equal,Fedmean,25,75.69
