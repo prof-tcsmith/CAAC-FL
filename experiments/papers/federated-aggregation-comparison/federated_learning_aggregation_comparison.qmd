@@ -114,7 +114,9 @@ CIFAR-10's moderate complexity makes it suitable for federated learning experime
 To comprehensively evaluate aggregation strategies across multiple dimensions, we employ three distinct partitioning strategies:
 
 #### 1. IID-Equal (Baseline)
+
 Random IID split with uniform client dataset sizes:
+
 - Training data randomly shuffled and partitioned into equal disjoint subsets
 - Each client receives equal samples: 5,000 (10 clients), 2,000 (25 clients), or 1,000 (50 clients)
 - All clients share the same test set (10,000 images) for centralized evaluation
@@ -123,7 +125,9 @@ Random IID split with uniform client dataset sizes:
 This baseline ensures client datasets are statistically homogeneous in both label distribution and size.
 
 #### 2. IID-Unequal (Dataset Size Heterogeneity)
+
 Random IID split with heterogeneous client dataset sizes:
+
 - Training data randomly shuffled (preserving IID label distribution)
 - Client dataset sizes sampled from Dirichlet distribution: $\text{Dir}(\alpha \mathbf{1})$ with $\alpha = 2.0$
 - Dataset sizes vary from ~500 to ~1,500 samples per client (tested with 50 clients)
@@ -132,7 +136,9 @@ Random IID split with heterogeneous client dataset sizes:
 This partitioning isolates the effect of FedAvg's dataset-size weighting by maintaining IID labels while varying client data quantities.
 
 #### 3. Non-IID (Label Distribution Heterogeneity)
+
 Dirichlet-distributed label skew with equal client sizes:
+
 - Each client's label distribution sampled from Dirichlet: $\text{Dir}(\alpha \mathbf{1})$
 - Concentration parameter: $\alpha \in \{0.1, 0.5, 1.0\}$
   - $\alpha = 0.1$: Extreme heterogeneity (clients have 1-2 dominant classes)
@@ -174,16 +180,19 @@ The architecture balances expressiveness with computational efficiency, enabling
 We conduct 18 experiments across three experimental dimensions:
 
 **Dimension 1: Data Distribution**
+
 - IID-Equal (baseline)
 - IID-Unequal (dataset size heterogeneity)
 - Non-IID with α ∈ {0.1, 0.5, 1.0} (label skew)
 
 **Dimension 2: Client Count**
+
 - 10 clients (small-scale)
 - 25 clients (medium-scale)
 - 50 clients (large-scale)
 
 **Dimension 3: Aggregation Strategy**
+
 - FedAvg (weighted averaging)
 - FedMean (unweighted averaging)
 - FedMedian (coordinate-wise median)
@@ -226,6 +235,7 @@ $$
 $$
 
 where:
+
 - $\mathbf{w}_{t+1}$ is the global model at round $t+1$
 - $\mathbf{w}_{t+1}^{i}$ is the local model from client $i$
 - $n_i$ is the number of samples at client $i$
@@ -313,6 +323,7 @@ print(data_sorted.to_markdown(index=False))
 The left panel shows convergence trajectories, while the right panel displays final accuracy comparisons. Key findings:
 
 **IID-Unequal (50 clients, heterogeneous sizes)**:
+
 - **FedAvg**: 72.98% (highest)
 - **FedMean**: 70.97%
 - **FedMedian**: 68.27%
@@ -330,6 +341,7 @@ This validates **H1**: FedAvg's dataset-size weighting provides measurable advan
 **Figure 2**: Performance degradation as client count increases from 10 → 25 → 50 for IID-Equal partitioning. Left panel shows convergence curves for all three aggregation methods; right panel shows final accuracy vs. client count.
 
 **FedAvg Scalability**:
+
 - **10 clients**: 78.84% (baseline)
 - **25 clients**: 75.58% (−3.26%)
 - **50 clients**: 72.98% (−5.86% from baseline)
@@ -351,6 +363,7 @@ This validates **H1**: FedAvg's dataset-size weighting provides measurable advan
 Across all experimental conditions, FedMedian consistently trails averaging methods:
 
 **Performance Gap**:
+
 - vs. FedAvg: 0.3% to 4.71% lower accuracy (depending on configuration)
 - vs. FedMean: 0.07% to 2.7% lower accuracy
 
