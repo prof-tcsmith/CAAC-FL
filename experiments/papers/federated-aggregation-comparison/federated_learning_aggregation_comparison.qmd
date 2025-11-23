@@ -500,6 +500,7 @@ Our experiments provide empirical validation that **dataset-size weighting matte
 **Key Finding**: When client dataset sizes are heterogeneous (IID-Unequal with 500-1500 sample range), FedAvg's proportional weighting yields +2.01% accuracy advantage over unweighted FedMean.
 
 **Why This Matters**: In real-world federated deployments, client dataset sizes are rarely uniform:
+
 - **Cross-device FL**: User engagement varies wildly (some users interact daily, others weekly)
 - **Cross-silo FL**: Institutions have different data collection capacities (large hospitals vs. small clinics)
 - **IoT/Edge scenarios**: Sensors may have different operational durations or sampling rates
@@ -514,6 +515,7 @@ $$\text{When } n_1 = n_2 = \ldots = n_N: \quad \sum_{i=1}^{N} \frac{n_i}{n} \mat
 Increasing the number of participating clients systematically degrades model accuracy, even under ideal IID conditions.
 
 **Degradation Rates**:
+
 - **FedAvg**: −5.86% (10 → 50 clients)
 - **FedMean**: −7.50% (10 → 50 clients)
 - **FedMedian**: −10.27% (10 → 50 clients)
@@ -521,6 +523,7 @@ Increasing the number of participating clients systematically degrades model acc
 **Root Cause**: With more clients, the global dataset is partitioned into smaller local datasets. Each client performs local training on a smaller data subset, introducing more noise into local updates. When aggregated, this increased noise slows convergence. With fixed communication rounds (20), larger-scale systems have insufficient time to fully converge.
 
 **Practical Implications**:
+
 1. **Communication Budget Trade-off**: Systems with more clients require proportionally more communication rounds to achieve equivalent accuracy
 2. **Client Selection Strategies**: Sampling fewer high-quality clients may outperform full participation of many noisy clients
 3. **Local Epochs Tuning**: Increasing local epochs for large-scale deployments may partially compensate for smaller local datasets
@@ -532,16 +535,19 @@ Increasing the number of participating clients systematically degrades model acc
 FedMedian consistently underperforms averaging methods across all experimental conditions, confirming the robustness-performance trade-off.
 
 **Performance Cost**:
+
 - Accuracy gap: 0.3% to 10.3% below FedAvg (configuration-dependent)
 - Scalability penalty: Largest degradation with increasing clients
 - Convergence speed: Visibly slower in early rounds (5-15)
 
 **Why FedMedian Underperforms**:
+
 - **Information Loss**: Coordinate-wise median discards information from all but the middle-ranked client update for each parameter
 - **Statistical Inefficiency**: For $N$ honest clients, averaging aggregates information from all $N$ updates, while median only uses the central value
 - **Gradient Noise Amplification**: Median is less robust to gradient noise than mean, particularly with fewer samples (smaller local datasets)
 
 **When to Use FedMedian**: Despite performance costs, FedMedian provides inherent Byzantine robustness:
+
 - Breakdown point: 50% (tolerates up to $\lfloor N/2 \rfloor$ malicious clients)
 - No assumptions about attack strategy required
 - Computationally tractable for moderate-scale deployments (<100 clients)
@@ -567,18 +573,21 @@ Visual analysis of convergence curves (Figures 1-2) reveals consistent patterns:
 Our results provide actionable guidance for practitioners:
 
 **For Homogeneous Client Sizes (Equal Datasets)**:
+
 - **Recommendation**: FedMean
 - **Rationale**: Equivalent performance to FedAvg with reduced complexity (no dataset size tracking)
 - **Use Cases**: Cross-silo FL with balanced institutional datasets (e.g., hospital consortia with similar patient populations)
 - **Advantage**: Simpler implementation, reduced metadata communication, better privacy (dataset sizes not transmitted)
 
 **For Heterogeneous Client Sizes (Unequal Datasets)**:
+
 - **Recommendation**: FedAvg
 - **Rationale**: Empirically validated +2.01% accuracy advantage over unweighted averaging
 - **Use Cases**: Cross-device FL with variable user engagement (e.g., mobile keyboard prediction, fitness trackers, IoT sensors)
 - **Advantage**: Optimal utilization of available data; prevents bias toward small-dataset clients
 
 **For Byzantine-Threat Scenarios**:
+
 - **Recommendation**: FedMedian or stronger robust aggregators (Krum, Trimmed Mean)
 - **Rationale**: Inherent robustness to outliers (50% breakdown point)
 - **Use Cases**: FL with untrusted participants, open federated networks, financial fraud detection
@@ -589,11 +598,13 @@ Our results provide actionable guidance for practitioners:
 System designers must account for the scalability-accuracy trade-off:
 
 **Small-Scale Deployments (10-25 clients)**:
+
 - Expected accuracy: 75-79% (CIFAR-10 baseline)
 - Fast convergence: 15-20 rounds typically sufficient
 - Low gradient noise: All aggregation methods perform well
 
 **Large-Scale Deployments (50+ clients)**:
+
 - Expected accuracy: 68-73% (CIFAR-10 baseline, 20 rounds)
 - Slower convergence: May require 30-50+ rounds for equivalent accuracy
 - High gradient noise: FedMedian particularly affected
@@ -608,6 +619,7 @@ System designers must account for the scalability-accuracy trade-off:
 Diminishing returns enable early stopping trade-offs:
 
 **Communication Budget Recommendations**:
+
 - **Constrained budget** (10 rounds): Achieve ~65-70% accuracy, 50% communication savings
 - **Moderate budget** (15 rounds): Achieve ~70-75% accuracy, 25% communication savings
 - **Full budget** (20 rounds): Achieve ~73-79% accuracy (configuration-dependent)
@@ -617,6 +629,7 @@ Diminishing returns enable early stopping trade-offs:
 ### 4. Computational Overhead
 
 **Server-Side Aggregation Complexity**:
+
 - **FedAvg/FedMean**: $O(M \cdot N)$ where $M$ = model parameters, $N$ = clients
   - 50 clients, 61K parameters: ~3M operations, negligible time
 - **FedMedian**: $O(M \cdot N \log N)$
@@ -638,6 +651,7 @@ Diminishing returns enable early stopping trade-offs:
 **Impact**: Models may not reach full convergence potential. Accuracy comparisons at round 20 may not reflect long-term asymptotic behavior.
 
 **Justification**: Despite reduced rounds, our results show:
+
 - Clear convergence trends in all experiments
 - Consistent hypothesis validation across configurations
 - Diminishing returns after round 15 (suggesting near-convergence)
@@ -655,10 +669,12 @@ Diminishing returns enable early stopping trade-offs:
 ### 3. Single Dataset and Architecture
 
 **Limitation**: Experiments limited to:
+
 - **Dataset**: CIFAR-10 (image classification)
 - **Model**: SimpleCNN (61K parameters)
 
 **Generalization Concerns**: Results may not transfer to:
+
 - Natural language processing (transformers, BERT-scale models)
 - Larger vision models (ResNet-50, ViT)
 - Other domains (time-series, tabular data, graphs)
@@ -670,6 +686,7 @@ Diminishing returns enable early stopping trade-offs:
 **Limitation**: Level 2 Non-IID experiments (Dirichlet label skew with α ∈ {0.1, 0.5, 1.0}) were completed but not fully integrated into comprehensive comparative analysis.
 
 **Current Status**:
+
 - ✅ Experiments completed (9 Non-IID configurations)
 - ✅ Individual experiment results saved
 - ⚠️ Comparative plots with IID experiments not generated
@@ -680,11 +697,13 @@ Diminishing returns enable early stopping trade-offs:
 ### 5. Communication Cost Modeling
 
 **Limitation**: Evaluation focuses on test accuracy and convergence rounds. True communication costs depend on:
+
 - Bytes transmitted (model size, compression)
 - Network latency and bandwidth
 - Asynchronous updates and stragglers
 
 **Missing Analysis**:
+
 - Wall-clock time under realistic network conditions
 - Communication-computation trade-offs with compression
 - Partial client participation per round
@@ -692,6 +711,7 @@ Diminishing returns enable early stopping trade-offs:
 ### 6. Hyperparameter Sensitivity
 
 **Limitation**: Experiments use fixed hyperparameters:
+
 - Learning rate: 0.01 (no decay)
 - Local epochs: 5
 - Batch size: 32
@@ -705,12 +725,14 @@ Diminishing returns enable early stopping trade-offs:
 ### Immediate Next Steps
 
 **1. Integration of Non-IID Results**
+
 - **Status**: Experiments completed but analysis incomplete
 - **Task**: Integrate Level 2 Non-IID results (α ∈ {0.1, 0.5, 1.0}) into comprehensive comparative analysis
 - **Expected Outcome**: Validate aggregation strategy robustness to label distribution skew
 - **Hypothesis**: FedAvg performance degrades with extreme heterogeneity (α = 0.1); robust aggregators (FedMedian, Krum) maintain better performance
 
 **2. Byzantine Attack Evaluation**
+
 - **Status**: Some Level 3 experiments completed but not integrated
 - **Task**: Systematic Byzantine attack simulation
   - Attack types: Random noise injection, gradient sign flipping, backdoor poisoning
@@ -720,6 +742,7 @@ Diminishing returns enable early stopping trade-offs:
 - **Key Question**: At what attacker fraction does robustness justify accuracy penalty?
 
 **3. Extended Convergence Analysis**
+
 - **Task**: Rerun selected experiments with 50-100 rounds to confirm long-term convergence behavior
 - **Expected Outcome**: Validate that patterns observed at 20 rounds hold at full convergence
 - **Specific Experiments**: IID-Unequal and Client Scaling scenarios (highest practical importance)
@@ -727,17 +750,20 @@ Diminishing returns enable early stopping trade-offs:
 ### Advanced Aggregation Methods
 
 **Adaptive Aggregation**:
+
 - **Client weighting by contribution quality**: Downweight low-loss-reduction clients dynamically
 - **Aggregation strategy selection**: Meta-learning to choose FedAvg vs FedMedian per round based on update heterogeneity
 - **Momentum-based aggregation**: Server-side momentum to stabilize updates
 
 **Enhanced Robust Aggregation**:
+
 - **Trimmed Mean**: Remove top/bottom k% of updates before averaging (intermediate robustness)
 - **Krum variants**: Multi-Krum, Bulyan (combining Krum with trimmed mean)
 - **Geometric Median**: Optimal robustness but higher computational cost
 - **Centered Clipping**: Clip updates to bounded norm before aggregation
 
 **Personalized Federated Learning**:
+
 - Test whether personalized approaches (local + global model mixture) mitigate scalability degradation
 - Clustered FL: Group clients by data similarity, run separate aggregations per cluster
 - Per-client learning rate adaptation
@@ -745,6 +771,7 @@ Diminishing returns enable early stopping trade-offs:
 ### Theoretical Extensions
 
 **Convergence Analysis**:
+
 - Formal convergence rate bounds for FedAvg, FedMean, FedMedian under:
   - IID conditions with heterogeneous client sizes
   - Non-IID label skew
@@ -752,27 +779,32 @@ Diminishing returns enable early stopping trade-offs:
 - Sample complexity requirements for target accuracy
 
 **Optimality Theory**:
+
 - Prove conditions under which FedAvg's weighting is provably optimal
 - Characterize robustness-optimality trade-off frontier (Pareto front)
 
 **Privacy Implications**:
+
 - Analyze whether aggregation strategy affects differential privacy guarantees
 - Study information leakage through dataset size metadata (FedAvg vs FedMean)
 
 ### Generalization Studies
 
 **Datasets**:
+
 - Vision: ImageNet, FEMNIST (naturally non-IID)
 - NLP: LSTM sentiment analysis, next-word prediction
 - Tabular: UCI benchmarks, healthcare predictions
 - Time-series: Activity recognition, sensor forecasting
 
 **Model Architectures**:
+
 - Deeper CNNs (ResNet-18, ResNet-50)
 - Transformers (ViT, BERT-base)
 - Recurrent networks (LSTM, GRU)
 
 **Domains**:
+
 - Healthcare: Multi-hospital disease prediction, medical imaging
 - Finance: Fraud detection across institutions
 - IoT: Smart home energy optimization, predictive maintenance
@@ -780,11 +812,13 @@ Diminishing returns enable early stopping trade-offs:
 ### Real-World Deployment
 
 **Production FL Systems**:
+
 - Deploy on real mobile devices (not simulation)
 - Handle network failures, stragglers, partial participation
 - Measure wall-clock time, energy consumption, bandwidth usage
 
 **Federated Benchmarks**:
+
 - Participate in community benchmarks (LEAF, FLSim)
 - Compare against state-of-the-art baselines
 - Contribute findings to FL standardization efforts
@@ -853,6 +887,7 @@ We provide actionable guidance for aggregation strategy selection:
 ## Final Takeaway
 
 Aggregation strategy selection is **not one-size-fits-all**. The optimal choice depends on deployment characteristics:
+
 - **Data heterogeneity**: IID-Equal → FedMean; IID-Unequal → FedAvg
 - **Scale**: Small → any method; Large → FedAvg with careful tuning
 - **Threat model**: Honest clients → averaging; Byzantine threats → robust aggregators
@@ -893,6 +928,7 @@ Our multi-dimensional study provides the empirical foundation for making these c
 **Execution Time**: Approximately 2-3 hours for complete suite (parallelized across 2× GPUs)
 
 **Resource Utilization**:
+
 - GPU memory: ~2-4GB per experiment (0.04 GPU per client with Ray)
 - CPU cores: 20-30 cores active during simulation
 - Disk space: ~50MB per experiment (JSON logs + model checkpoints)
@@ -932,11 +968,13 @@ experiments/
 ### Key Execution Scripts
 
 **Master Script**: `run_comprehensive_experiments.sh`
+
 - Orchestrates all 18 experiments
 - Handles environment activation (conda)
 - Logs all output to `comprehensive_experiments.log`
 
 **Analysis Script**: `analyze_comprehensive_results.py`
+
 - Loads JSON experiment results from `./results/comprehensive/`
 - Generates 3 comparison plots (Figures 1-3)
 - Exports `comprehensive_summary.csv`
