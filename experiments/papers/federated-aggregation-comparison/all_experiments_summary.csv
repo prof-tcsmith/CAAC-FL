@@ -1,0 +1,19 @@
+Level,Data Type,Aggregation,Clients,Alpha,Final Accuracy (%),Partition,Status
+Level 1,IID-Equal,FEDAVG,10,N/A,78.84,iid-equal,OK
+Level 1,IID-Equal,FEDAVG,25,N/A,75.58,iid-equal,OK
+Level 1,IID-Equal,FEDMEAN,10,N/A,78.47,iid-equal,OK
+Level 1,IID-Equal,FEDMEAN,25,N/A,75.69,iid-equal,OK
+Level 1,IID-Equal,FEDMEDIAN,10,N/A,78.54,iid-equal,OK
+Level 1,IID-Equal,FEDMEDIAN,25,N/A,75.02,iid-equal,OK
+Level 1,IID-Unequal,FEDAVG,50,N/A,72.98,iid-unequal,OK
+Level 1,IID-Unequal,FEDMEAN,50,N/A,70.97,iid-unequal,OK
+Level 1,IID-Unequal,FEDMEDIAN,50,N/A,68.27,iid-unequal,OK
+Level 2,Non-IID (α=0.1),FEDAVG,50,0.1,66.77,non-iid,OK
+Level 2,Non-IID (α=0.1),FEDMEDIAN,50,0.1,43.72,non-iid,OK
+Level 2,Non-IID (α=0.1),KRUM,50,0.1,FAILED,non-iid,FAILED
+Level 2,Non-IID (α=0.5),FEDAVG,50,0.5,69.62,non-iid,OK
+Level 2,Non-IID (α=0.5),FEDMEDIAN,50,0.5,63.79,non-iid,OK
+Level 2,Non-IID (α=0.5),KRUM,50,0.5,FAILED,non-iid,FAILED
+Level 2,Non-IID (α=1.0),FEDAVG,50,1.0,70.49,non-iid,OK
+Level 2,Non-IID (α=1.0),FEDMEDIAN,50,1.0,67.19,non-iid,OK
+Level 2,Non-IID (α=1.0),KRUM,50,1.0,FAILED,non-iid,FAILED

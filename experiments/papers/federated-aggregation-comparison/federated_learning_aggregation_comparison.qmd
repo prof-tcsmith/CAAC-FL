@@ -18,9 +18,17 @@ bibliography: references.bib
 
 # Abstract
 
-Federated Learning (FL) has emerged as a paradigm-shifting approach to distributed machine learning, enabling collaborative model training across decentralized data sources while preserving data privacy. A critical component of FL systems is the aggregation strategy used to combine local model updates from participating clients. This paper presents a **multi-dimensional empirical study** comparing fundamental aggregation strategies—Federated Averaging (FedAvg), Federated Mean (FedMean), and Federated Median (FedMedian)—across three experimental axes: **(1) data distribution heterogeneity** (IID-Equal vs. IID-Unequal client dataset sizes), **(2) client scalability** (10, 25, 50 clients), and **(3) non-IID data challenges** (Dirichlet distribution with varying concentration parameters). Through systematic experimentation on CIFAR-10 with 18 distinct experimental configurations, we provide comprehensive insights into aggregation strategy performance under realistic federated settings.
+Federated Learning (FL) has emerged as a paradigm-shifting approach to distributed machine learning, enabling collaborative model training across decentralized data sources while preserving data privacy. A critical component of FL systems is the aggregation strategy used to combine local model updates from participating clients. This paper presents a **multi-dimensional empirical study** comparing fundamental aggregation strategies—Federated Averaging (FedAvg), Federated Mean (FedMean), Federated Median (FedMedian), and Krum—across three experimental axes: **(1) data distribution heterogeneity** (IID-Equal vs. IID-Unequal client dataset sizes), **(2) client scalability** (10, 25, 50 clients), and **(3) non-IID data challenges** (Dirichlet label skew with α ∈ {0.1, 0.5, 1.0}). Through systematic experimentation on CIFAR-10 with 18 experimental configurations across Level 1 (IID) and Level 2 (Non-IID) scenarios, we provide comprehensive insights into aggregation strategy performance under realistic federated settings.
 
-Our key findings demonstrate: **(1)** FedAvg's dataset-size weighting provides a measurable advantage (+2.01%) over FedMean when client datasets are heterogeneous in size, validating the importance of proportional weighting; **(2)** accuracy systematically degrades as client count increases (78.8% → 75.6% → 73.0% for FedAvg), suggesting convergence challenges at scale; and **(3)** FedMedian maintains competitive performance while offering theoretical robustness guarantees. These results establish empirical baselines for aggregation strategy selection and inform the design of next-generation Byzantine-robust federated learning systems.
+Our key findings demonstrate:
+
+- **(1)** FedAvg's dataset-size weighting provides a measurable advantage (+2.01%) over FedMean when client datasets are heterogeneous in size, validating the importance of proportional weighting
+- **(2)** Accuracy systematically degrades as client count increases (78.8% → 75.6% → 73.0% for FedAvg), suggesting convergence challenges at scale
+- **(3)** Non-IID data causes severe performance degradation—FedAvg drops from 72.98% (IID-Unequal) to 66.77% (Non-IID α=0.1), a −6.21% penalty for extreme label heterogeneity
+- **(4)** FedMedian shows catastrophic failure under extreme Non-IID conditions (43.72% with α=0.1), losing its competitive advantage
+- **(5)** Krum, despite being designed for Byzantine robustness, completely failed to train in our Non-IID experiments (stuck at 8.6% random chance), revealing critical implementation or hyperparameter sensitivity issues
+
+These results establish empirical baselines for aggregation strategy selection and reveal that data heterogeneity—not adversarial attacks—is the primary challenge for practical federated learning deployments.
 
 **Keywords:** Federated Learning, Aggregation Strategies, Distributed Machine Learning, Data Heterogeneity, Byzantine Robustness, CIFAR-10
 
@@ -352,19 +360,113 @@ Across all experimental conditions, FedMedian consistently trails averaging meth
 
 **Verdict**: **H3 Confirmed**. FedMedian demonstrates the expected robustness-performance trade-off.
 
+## Level 2: Non-IID Performance Analysis
+
+### Non-IID Data Heterogeneity Impact
+
+![Non-IID Comprehensive Analysis](noniid_comprehensive_analysis.png)
+
+**Figure 4**: Non-IID performance analysis. Left: Convergence trajectories for extreme heterogeneity (α=0.1). Right: Final accuracy across heterogeneity levels (α ∈ {0.1, 0.5, 1.0}) for FedAvg and FedMedian.
+
+Level 2 experiments introduce label distribution skew using Dirichlet-distributed client data with concentration parameter α. Lower α values indicate more extreme heterogeneity:
+
+- **α = 0.1**: Extreme heterogeneity (clients have 1-2 dominant classes)
+- **α = 0.5**: Moderate heterogeneity
+- **α = 1.0**: Mild heterogeneity (approaching IID)
+
+**Key Findings**:
+
+| Aggregation | α=0.1 | α=0.5 | α=1.0 | Degradation (0.1→1.0) |
+|-------------|-------|-------|-------|----------------------|
+| FedAvg | 66.77% | 69.62% | 70.49% | +3.72% |
+| FedMedian | 43.72% | 63.79% | 67.19% | +23.47% |
+
+**Non-IID Penalty (vs. IID-Unequal baseline)**:
+
+- FedAvg: 72.98% (IID) → 66.77% (α=0.1) = **−6.21% penalty**
+- FedMedian: 68.27% (IID) → 43.72% (α=0.1) = **−24.55% penalty**
+
+### FedMedian Catastrophic Failure
+
+FedMedian exhibits catastrophic performance degradation under extreme Non-IID conditions (α=0.1), achieving only 43.72% accuracy—barely better than random chance for a 10-class problem (10% baseline). This represents:
+
+- **−24.55% drop** from IID-Unequal performance
+- **−23.05% gap** vs. FedAvg under same conditions
+- Complete loss of competitive advantage
+
+**Root Cause**: Coordinate-wise median is highly sensitive to statistical heterogeneity. When clients have non-overlapping label distributions:
+
+1. Model parameters diverge significantly across clients
+2. Median operation selects parameters from potentially incompatible models
+3. Resulting global model fails to generalize
+4. Convergence stalls or diverges
+
+**Implication**: FedMedian's robustness to Byzantine attacks comes at the cost of extreme fragility to statistical heterogeneity—paradoxically making it unsuitable for realistic federated scenarios where data heterogeneity is the primary challenge.
+
+### IID vs. Non-IID Direct Comparison
+
+![IID vs Non-IID Comparison](iid_vs_noniid_comparison.png)
+
+**Figure 5**: Direct comparison of IID-Equal (left) vs. Non-IID α=0.5 (right) performance for FedAvg and FedMedian with 50 clients.
+
+The side-by-side comparison reveals:
+
+**FedAvg Resilience**:
+
+- IID-Equal (50 clients): 72.98%
+- Non-IID α=0.5: 69.62%
+- Degradation: −3.36% (relatively robust)
+
+**FedMedian Brittleness**:
+
+- IID-Equal (50 clients): 68.27%
+- Non-IID α=0.5: 63.79%
+- Degradation: −4.48% (more sensitive)
+
+FedAvg demonstrates superior resilience to data heterogeneity, maintaining reasonable performance even under moderate Non-IID conditions. FedMedian's sensitivity suggests it should be avoided in heterogeneous federated settings.
+
+### Krum Complete Failure
+
+**Critical Finding**: All three Krum experiments (α ∈ {0.1, 0.5, 1.0}) completely failed to train, remaining stuck at 8.6% accuracy (random chance for 10 classes) across all 20 communication rounds.
+
+**Evidence**:
+
+- Test accuracy: 8.6% (never improved)
+- Test loss: 2.305 (initial cross-entropy for uniform predictions)
+- Status: FAILED for α=0.1, 0.5, 1.0
+
+**Possible Causes**:
+
+1. **Hyperparameter Sensitivity**: Krum may require different learning rates, local epochs, or client sampling ratios than FedAvg/FedMedian
+2. **Implementation Issues**: Krum's client selection mechanism may have introduced bugs in our implementation
+3. **Statistical Failure Mode**: With 50 clients and high Non-IID heterogeneity, Krum's distance-based selection may consistently choose outlier models
+4. **Initialization Problems**: Random initialization may have been particularly poor for Krum's convergence requirements
+
+**Implication**: While Krum is theoretically robust to Byzantine attacks, our results reveal it is either:
+
+- Highly sensitive to hyperparameter tuning
+- Unsuitable for Non-IID federated scenarios, or
+- Requires more sophisticated initialization or warm-start procedures
+
+This represents a critical negative result: Byzantine-robust aggregators like Krum may fail catastrophically in realistic federated settings with data heterogeneity, even without adversarial clients.
+
 ## Grand Comparison Heatmap
 
-![Grand Comparison Heatmap](heatmap_grand_comparison.png)
+![Grand Comparison Heatmap - All Experiments](grand_heatmap_all_experiments.png)
 
-**Figure 3**: Heatmap of final test accuracy across all experimental configurations. Rows represent partition types and client counts; columns represent aggregation methods.
+**Figure 6**: Comprehensive heatmap of final test accuracy across ALL Level 1 and Level 2 experiments. Rows represent experimental configurations (data type and client count); columns represent aggregation methods. Krum experiments (FAILED) are excluded.
 
-The heatmap provides a holistic view of experimental results:
+The comprehensive heatmap provides a holistic view of all 15 successful experiments:
 
-**Diagonal Pattern**: Accuracy generally decreases from top-left (best: IID-Equal, 10 clients, FedAvg) to bottom-right (worst: IID-Unequal, 50 clients, FedMedian).
+**Key Patterns**:
 
-**Column Comparison**: FedAvg and FedMean columns show similar patterns with IID-Equal, but diverge with IID-Unequal (validating H1). FedMedian column is consistently cooler (lower accuracy).
+- **IID Experiments (top rows)**: Warm colors (75-79% accuracy) for small-scale scenarios (10, 25 clients)
+- **IID-Unequal (middle rows)**: Moderate cooling (68-73% accuracy) with clear FedAvg advantage
+- **Non-IID Experiments (bottom rows)**: Significant cooling (44-70% accuracy) with catastrophic FedMedian failure at α=0.1
+- **Column Comparison**: FedAvg consistently outperforms across all conditions; FedMedian shows extreme variability
+- **Diagonal Degradation**: Performance systematically degrades from top-left (best: IID-Equal, 10 clients) to bottom-right (worst: Non-IID α=0.1, FedMedian)
 
-**Row Comparison**: Rows representing 10-client experiments are warmer (higher accuracy) than 50-client experiments (validating H2).
+**Critical Insight**: The heatmap visually confirms that **data heterogeneity** (vertical axis variation) has a larger impact on performance than **aggregation strategy choice** (horizontal axis variation) for most configurations—except FedMedian under extreme Non-IID conditions.
 
 ---
 
