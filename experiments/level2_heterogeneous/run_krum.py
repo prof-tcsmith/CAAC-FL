@@ -36,6 +36,8 @@ def parse_args():
     parser.add_argument('--num_clients', type=int, default=50, help='Total number of clients')
     parser.add_argument('--num_rounds', type=int, default=50, help='Number of rounds')
     parser.add_argument('--alpha', type=float, default=0.5, help='Dirichlet alpha for non-IID data')
+    parser.add_argument('--variant', type=str, choices=['standard', 'multi'], default='multi',
+                       help='Krum variant: standard (m=1, single-client) or multi (m=n-f-2, multi-client averaging)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--output_dir', type=str, default='./results', help='Output directory for results')
     return parser.parse_args()
@@ -67,6 +69,7 @@ def main():
     print(f"  Local epochs: {LOCAL_EPOCHS}")
     print(f"  Dirichlet α: {DIRICHLET_ALPHA}")
     print(f"  Byzantine clients: {NUM_BYZANTINE} (no attacks)")
+    print(f"  Krum variant: {args.variant}")
     print(f"  Device: {DEVICE}")
     print(f"  Seed: {SEED}")
 
@@ -128,9 +131,10 @@ def main():
 
     # Initialize metrics logger
     os.makedirs(args.output_dir, exist_ok=True)
+    variant_suffix = 'std' if args.variant == 'standard' else 'multi'
     logger = MetricsLogger(
         log_dir=args.output_dir,
-        experiment_name=f'level2_noniid_krum_a{args.alpha}_c{NUM_CLIENTS}'
+        experiment_name=f'level2_noniid_krum_{variant_suffix}_a{args.alpha}_c{NUM_CLIENTS}'
     )
 
     # Log heterogeneity metrics
@@ -197,8 +201,20 @@ def main():
 
         return aggregated_metrics
 
-    # Configure Krum strategy
-    # Note: Krum doesn't support fit_metrics_aggregation_fn parameter
+    # Configure Krum strategy based on variant
+    if args.variant == 'standard':
+        # Standard Krum: single-client selection
+        NUM_SELECTED = 1
+        print(f"\nUsing Standard Krum with num_selected={NUM_SELECTED} client (single-client selection)")
+        print(f"  Note: Standard Krum may struggle with extreme Non-IID data")
+    else:
+        # Multi-Krum: multi-client averaging
+        # For Non-IID data, use Multi-Krum: num_selected = n - f - 2
+        # This averages multiple clients instead of selecting just one
+        NUM_SELECTED = NUM_CLIENTS - NUM_BYZANTINE - 2
+        print(f"\nUsing Multi-Krum with num_selected={NUM_SELECTED} clients (multi-client averaging)")
+        print(f"  (Multi-Krum better for Non-IID, captures diverse data distributions)")
+
     strategy = Krum(
         fraction_fit=1.0,
         fraction_evaluate=0.0,
@@ -209,7 +225,8 @@ def main():
         initial_parameters=fl.common.ndarrays_to_parameters(
             [val.cpu().numpy() for _, val in model.state_dict().items()]
         ),
-        num_byzantine=NUM_BYZANTINE
+        num_byzantine=NUM_BYZANTINE,
+        num_selected=NUM_SELECTED
     )
 
     # Configure Ray for better resource management

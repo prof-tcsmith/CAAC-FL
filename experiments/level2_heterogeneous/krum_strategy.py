@@ -11,6 +11,8 @@ making it robust to outliers (though may struggle with high heterogeneity).
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Union
 from flwr.common import (
+    EvaluateIns,
+    FitIns,
     FitRes,
     Parameters,
     Scalar,
@@ -24,10 +26,13 @@ from flwr.server.strategy.aggregate import aggregate
 
 class Krum(Strategy):
     """
-    Krum aggregation strategy.
+    Krum aggregation strategy (with Multi-Krum support).
 
-    Selects the client update that minimizes the sum of distances to its
+    Standard Krum: Selects the client update that minimizes the sum of distances to its
     k nearest neighbors, where k = n - f - 2 (n = total clients, f = Byzantine clients).
+
+    Multi-Krum: Selects the top m clients with lowest scores and averages their updates.
+    This variant is better suited for heterogeneous (Non-IID) data.
     """
 
     def __init__(
@@ -40,6 +45,7 @@ class Krum(Strategy):
         evaluate_fn=None,
         initial_parameters: Optional[Parameters] = None,
         num_byzantine: int = 0,
+        num_selected: int = 1,
     ):
         """
         Initialize Krum strategy.
@@ -53,6 +59,8 @@ class Krum(Strategy):
             evaluate_fn: Centralized evaluation function
             initial_parameters: Initial global model parameters
             num_byzantine: Expected number of Byzantine clients (for k calculation)
+            num_selected: Number of clients to select (1 = Krum, m > 1 = Multi-Krum)
+                         For Non-IID data, use m = n - f - 2 for best heterogeneity handling
         """
         super().__init__()
         self.fraction_fit = fraction_fit
@@ -63,6 +71,7 @@ class Krum(Strategy):
         self.evaluate_fn = evaluate_fn
         self.initial_parameters = initial_parameters
         self.num_byzantine = num_byzantine
+        self.num_selected = num_selected
 
     def initialize_parameters(self, client_manager) -> Optional[Parameters]:
         """Initialize global model parameters."""
@@ -83,8 +92,11 @@ class Krum(Strategy):
         # Create config
         config = {"server_round": server_round}
 
-        # Return client/config pairs
-        return [(client, {"parameters": parameters, "config": config}) for client in clients]
+        # Create FitIns for each client
+        fit_ins = FitIns(parameters, config)
+
+        # Return client/FitIns pairs
+        return [(client, fit_ins) for client in clients]
 
     def aggregate_fit(
         self,
@@ -110,11 +122,23 @@ class Krum(Strategy):
         weights_list = [parameters_to_ndarrays(fit_res.parameters)
                        for _, fit_res in results]
 
-        # Apply Krum selection
-        selected_idx = self._krum_selection(weights_list)
+        # Apply Krum/Multi-Krum selection
+        selected_indices = self._krum_selection(weights_list)
 
-        # Use the selected client's weights
-        aggregated_weights = weights_list[selected_idx]
+        # If Multi-Krum (num_selected > 1), average the selected clients
+        if self.num_selected == 1:
+            # Standard Krum: use single selected client
+            aggregated_weights = weights_list[selected_indices[0]]
+        else:
+            # Multi-Krum: average selected clients
+            selected_weights = [weights_list[idx] for idx in selected_indices]
+            # Average across selected clients for each layer
+            aggregated_weights = []
+            for layer_idx in range(len(selected_weights[0])):
+                layer_weights = [w[layer_idx] for w in selected_weights]
+                avg_layer = np.mean(layer_weights, axis=0)
+                aggregated_weights.append(avg_layer)
+
         parameters_aggregated = ndarrays_to_parameters(aggregated_weights)
 
         # Aggregate custom metrics if available
@@ -131,19 +155,22 @@ class Krum(Strategy):
             if train_accuracies:
                 metrics_aggregated["train_accuracy"] = float(np.mean(train_accuracies))
 
-            metrics_aggregated["selected_client_idx"] = int(selected_idx)
+            if self.num_selected == 1:
+                metrics_aggregated["selected_client_idx"] = int(selected_indices[0])
+            else:
+                metrics_aggregated["num_selected_clients"] = len(selected_indices)
 
         return parameters_aggregated, metrics_aggregated
 
-    def _krum_selection(self, weights_list: List[List[np.ndarray]]) -> int:
+    def _krum_selection(self, weights_list: List[List[np.ndarray]]) -> List[int]:
         """
-        Select the best client using Krum criterion.
+        Select the best client(s) using Krum criterion.
 
         Args:
             weights_list: List of client weight updates
 
         Returns:
-            Index of selected client
+            List of indices of selected clients (length 1 for Krum, m for Multi-Krum)
         """
         n = len(weights_list)
         f = self.num_byzantine
@@ -182,10 +209,15 @@ class Krum(Strategy):
             score = np.sum(k_nearest_dists)
             scores.append(score)
 
-        # Select client with minimum score
-        selected_idx = int(np.argmin(scores))
+        # Select client(s) with minimum score(s)
+        scores = np.array(scores)
 
-        return selected_idx
+        # For Multi-Krum, select top num_selected clients
+        # For standard Krum, select top 1
+        num_to_select = min(self.num_selected, n_clients)
+        selected_indices = np.argsort(scores)[:num_to_select].tolist()
+
+        return selected_indices
 
     def configure_evaluate(
         self, server_round: int, parameters: Parameters, client_manager
@@ -205,8 +237,11 @@ class Krum(Strategy):
         # Create config
         config = {"server_round": server_round}
 
-        # Return client/config pairs
-        return [(client, {"parameters": parameters, "config": config}) for client in clients]
+        # Create EvaluateIns for each client
+        evaluate_ins = EvaluateIns(parameters, config)
+
+        # Return client/EvaluateIns pairs
+        return [(client, evaluate_ins) for client in clients]
 
     def aggregate_evaluate(
         self,
