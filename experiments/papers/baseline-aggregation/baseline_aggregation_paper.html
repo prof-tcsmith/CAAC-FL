@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.5">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="[Author Name]">
+
+<title>Empirical Comparison of Federated Learning Aggregation Strategies: Establishing Baselines for Honest Client Scenarios</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for citations */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+  margin-bottom: 0em;
+}
+.hanging-indent div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}</style>
+
+
+<script src="baseline_aggregation_paper_files/libs/clipboard/clipboard.min.js"></script>
+<script src="baseline_aggregation_paper_files/libs/quarto-html/quarto.js"></script>
+<script src="baseline_aggregation_paper_files/libs/quarto-html/popper.min.js"></script>
+<script src="baseline_aggregation_paper_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="baseline_aggregation_paper_files/libs/quarto-html/anchor.min.js"></script>
+<link href="baseline_aggregation_paper_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="baseline_aggregation_paper_files/libs/quarto-html/quarto-syntax-highlighting-ff4371ef257df69894857e99c6ad0d06.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="baseline_aggregation_paper_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="baseline_aggregation_paper_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="baseline_aggregation_paper_files/libs/bootstrap/bootstrap-e61a2d20db4fff35bf76713722711eec.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body>
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#abstract" id="toc-abstract" class="nav-link active" data-scroll-target="#abstract"><span class="header-section-number">1</span> Abstract</a></li>
+  <li><a href="#introduction" id="toc-introduction" class="nav-link" data-scroll-target="#introduction"><span class="header-section-number">2</span> Introduction</a>
+  <ul class="collapse">
+  <li><a href="#federated-learning-fundamentals" id="toc-federated-learning-fundamentals" class="nav-link" data-scroll-target="#federated-learning-fundamentals"><span class="header-section-number">2.1</span> Federated Learning Fundamentals</a></li>
+  <li><a href="#research-gap" id="toc-research-gap" class="nav-link" data-scroll-target="#research-gap"><span class="header-section-number">2.2</span> Research Gap</a></li>
+  <li><a href="#contributions" id="toc-contributions" class="nav-link" data-scroll-target="#contributions"><span class="header-section-number">2.3</span> Contributions</a></li>
+  </ul></li>
+  <li><a href="#related-work" id="toc-related-work" class="nav-link" data-scroll-target="#related-work"><span class="header-section-number">3</span> Related Work</a>
+  <ul class="collapse">
+  <li><a href="#federated-learning-and-fedavg" id="toc-federated-learning-and-fedavg" class="nav-link" data-scroll-target="#federated-learning-and-fedavg"><span class="header-section-number">3.1</span> Federated Learning and FedAvg</a></li>
+  <li><a href="#alternative-aggregation-strategies" id="toc-alternative-aggregation-strategies" class="nav-link" data-scroll-target="#alternative-aggregation-strategies"><span class="header-section-number">3.2</span> Alternative Aggregation Strategies</a>
+  <ul class="collapse">
+  <li><a href="#fedmean-unweighted-averaging" id="toc-fedmean-unweighted-averaging" class="nav-link" data-scroll-target="#fedmean-unweighted-averaging"><span class="header-section-number">3.2.1</span> FedMean (Unweighted Averaging)</a></li>
+  <li><a href="#fedmedian-coordinate-wise-median" id="toc-fedmedian-coordinate-wise-median" class="nav-link" data-scroll-target="#fedmedian-coordinate-wise-median"><span class="header-section-number">3.2.2</span> FedMedian (Coordinate-wise Median)</a></li>
+  </ul></li>
+  <li><a href="#position-of-this-work" id="toc-position-of-this-work" class="nav-link" data-scroll-target="#position-of-this-work"><span class="header-section-number">3.3</span> Position of This Work</a></li>
+  </ul></li>
+  <li><a href="#methodology" id="toc-methodology" class="nav-link" data-scroll-target="#methodology"><span class="header-section-number">4</span> Methodology</a>
+  <ul class="collapse">
+  <li><a href="#experimental-design" id="toc-experimental-design" class="nav-link" data-scroll-target="#experimental-design"><span class="header-section-number">4.1</span> Experimental Design</a>
+  <ul class="collapse">
+  <li><a href="#datasets" id="toc-datasets" class="nav-link" data-scroll-target="#datasets"><span class="header-section-number">4.1.1</span> Datasets</a></li>
+  <li><a href="#aggregation-strategies" id="toc-aggregation-strategies" class="nav-link" data-scroll-target="#aggregation-strategies"><span class="header-section-number">4.1.2</span> Aggregation Strategies</a></li>
+  <li><a href="#data-distribution-conditions" id="toc-data-distribution-conditions" class="nav-link" data-scroll-target="#data-distribution-conditions"><span class="header-section-number">4.1.3</span> Data Distribution Conditions</a></li>
+  <li><a href="#statistical-rigor" id="toc-statistical-rigor" class="nav-link" data-scroll-target="#statistical-rigor"><span class="header-section-number">4.1.4</span> Statistical Rigor</a></li>
+  </ul></li>
+  <li><a href="#fixed-hyperparameters" id="toc-fixed-hyperparameters" class="nav-link" data-scroll-target="#fixed-hyperparameters"><span class="header-section-number">4.2</span> Fixed Hyperparameters</a></li>
+  <li><a href="#model-architecture" id="toc-model-architecture" class="nav-link" data-scroll-target="#model-architecture"><span class="header-section-number">4.3</span> Model Architecture</a></li>
+  <li><a href="#experiment-matrix" id="toc-experiment-matrix" class="nav-link" data-scroll-target="#experiment-matrix"><span class="header-section-number">4.4</span> Experiment Matrix</a></li>
+  </ul></li>
+  <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results"><span class="header-section-number">5</span> Results</a>
+  <ul class="collapse">
+  <li><a href="#summary-statistics" id="toc-summary-statistics" class="nav-link" data-scroll-target="#summary-statistics"><span class="header-section-number">5.1</span> Summary Statistics</a>
+  <ul class="collapse">
+  <li><a href="#mnist" id="toc-mnist" class="nav-link" data-scroll-target="#mnist"><span class="header-section-number">5.1.1</span> MNIST</a></li>
+  <li><a href="#fashion-mnist" id="toc-fashion-mnist" class="nav-link" data-scroll-target="#fashion-mnist"><span class="header-section-number">5.1.2</span> Fashion-MNIST</a></li>
+  <li><a href="#cifar-10" id="toc-cifar-10" class="nav-link" data-scroll-target="#cifar-10"><span class="header-section-number">5.1.3</span> CIFAR-10</a></li>
+  </ul></li>
+  <li><a href="#statistical-significance" id="toc-statistical-significance" class="nav-link" data-scroll-target="#statistical-significance"><span class="header-section-number">5.2</span> Statistical Significance</a>
+  <ul class="collapse">
+  <li><a href="#anova-results" id="toc-anova-results" class="nav-link" data-scroll-target="#anova-results"><span class="header-section-number">5.2.1</span> ANOVA Results</a></li>
+  <li><a href="#key-statistical-findings" id="toc-key-statistical-findings" class="nav-link" data-scroll-target="#key-statistical-findings"><span class="header-section-number">5.2.2</span> Key Statistical Findings</a></li>
+  </ul></li>
+  <li><a href="#convergence-analysis" id="toc-convergence-analysis" class="nav-link" data-scroll-target="#convergence-analysis"><span class="header-section-number">5.3</span> Convergence Analysis</a>
+  <ul class="collapse">
+  <li><a href="#mnist-convergence" id="toc-mnist-convergence" class="nav-link" data-scroll-target="#mnist-convergence"><span class="header-section-number">5.3.1</span> MNIST Convergence</a></li>
+  <li><a href="#fashion-mnist-convergence" id="toc-fashion-mnist-convergence" class="nav-link" data-scroll-target="#fashion-mnist-convergence"><span class="header-section-number">5.3.2</span> Fashion-MNIST Convergence</a></li>
+  <li><a href="#cifar-10-convergence" id="toc-cifar-10-convergence" class="nav-link" data-scroll-target="#cifar-10-convergence"><span class="header-section-number">5.3.3</span> CIFAR-10 Convergence</a></li>
+  </ul></li>
+  <li><a href="#effect-of-data-imbalance" id="toc-effect-of-data-imbalance" class="nav-link" data-scroll-target="#effect-of-data-imbalance"><span class="header-section-number">5.4</span> Effect of Data Imbalance</a>
+  <ul class="collapse">
+  <li><a href="#analysis" id="toc-analysis" class="nav-link" data-scroll-target="#analysis"><span class="header-section-number">5.4.1</span> Analysis</a></li>
+  <li><a href="#key-findings" id="toc-key-findings" class="nav-link" data-scroll-target="#key-findings"><span class="header-section-number">5.4.2</span> Key Findings</a></li>
+  </ul></li>
+  </ul></li>
+  <li><a href="#discussion" id="toc-discussion" class="nav-link" data-scroll-target="#discussion"><span class="header-section-number">6</span> Discussion</a>
+  <ul class="collapse">
+  <li><a href="#key-findings-1" id="toc-key-findings-1" class="nav-link" data-scroll-target="#key-findings-1"><span class="header-section-number">6.1</span> Key Findings</a>
+  <ul class="collapse">
+  <li><a href="#near-equivalence-under-ideal-conditions" id="toc-near-equivalence-under-ideal-conditions" class="nav-link" data-scroll-target="#near-equivalence-under-ideal-conditions"><span class="header-section-number">6.1.1</span> 1. Near-Equivalence Under Ideal Conditions</a></li>
+  <li><a href="#dramatic-impact-of-data-imbalance" id="toc-dramatic-impact-of-data-imbalance" class="nav-link" data-scroll-target="#dramatic-impact-of-data-imbalance"><span class="header-section-number">6.1.2</span> 2. Dramatic Impact of Data Imbalance</a></li>
+  <li><a href="#fedavgs-unexpected-improvement-with-imbalance" id="toc-fedavgs-unexpected-improvement-with-imbalance" class="nav-link" data-scroll-target="#fedavgs-unexpected-improvement-with-imbalance"><span class="header-section-number">6.1.3</span> 3. FedAvg’s Unexpected Improvement with Imbalance</a></li>
+  <li><a href="#fedmedians-vulnerability-to-imbalance" id="toc-fedmedians-vulnerability-to-imbalance" class="nav-link" data-scroll-target="#fedmedians-vulnerability-to-imbalance"><span class="header-section-number">6.1.4</span> 4. FedMedian’s Vulnerability to Imbalance</a></li>
+  </ul></li>
+  <li><a href="#implications-for-practice" id="toc-implications-for-practice" class="nav-link" data-scroll-target="#implications-for-practice"><span class="header-section-number">6.2</span> Implications for Practice</a>
+  <ul class="collapse">
+  <li><a href="#aggregation-strategy-selection" id="toc-aggregation-strategy-selection" class="nav-link" data-scroll-target="#aggregation-strategy-selection"><span class="header-section-number">6.2.1</span> Aggregation Strategy Selection</a></li>
+  <li><a href="#baseline-establishment" id="toc-baseline-establishment" class="nav-link" data-scroll-target="#baseline-establishment"><span class="header-section-number">6.2.2</span> Baseline Establishment</a></li>
+  </ul></li>
+  <li><a href="#limitations" id="toc-limitations" class="nav-link" data-scroll-target="#limitations"><span class="header-section-number">6.3</span> Limitations</a></li>
+  </ul></li>
+  <li><a href="#conclusion" id="toc-conclusion" class="nav-link" data-scroll-target="#conclusion"><span class="header-section-number">7</span> Conclusion</a>
+  <ul class="collapse">
+  <li><a href="#future-work" id="toc-future-work" class="nav-link" data-scroll-target="#future-work"><span class="header-section-number">7.1</span> Future Work</a></li>
+  </ul></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references"><span class="header-section-number">8</span> References</a></li>
+  <li><a href="#appendix" id="toc-appendix" class="nav-link" data-scroll-target="#appendix"><span class="header-section-number">9</span> Appendix</a>
+  <ul class="collapse">
+  <li><a href="#a.-detailed-results-tables" id="toc-a.-detailed-results-tables" class="nav-link" data-scroll-target="#a.-detailed-results-tables"><span class="header-section-number">9.1</span> A. Detailed Results Tables</a></li>
+  <li><a href="#b.-convergence-trajectories" id="toc-b.-convergence-trajectories" class="nav-link" data-scroll-target="#b.-convergence-trajectories"><span class="header-section-number">9.2</span> B. Convergence Trajectories</a></li>
+  <li><a href="#c.-statistical-test-details" id="toc-c.-statistical-test-details" class="nav-link" data-scroll-target="#c.-statistical-test-details"><span class="header-section-number">9.3</span> C. Statistical Test Details</a></li>
+  </ul></li>
+  </ul>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="baseline_aggregation_paper.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li></ul></div></nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Empirical Comparison of Federated Learning Aggregation Strategies: Establishing Baselines for Honest Client Scenarios</h1>
+</div>
+
+
+<div class="quarto-title-meta-author">
+  <div class="quarto-title-meta-heading">Author</div>
+  <div class="quarto-title-meta-heading">Affiliation</div>
+  
+    <div class="quarto-title-meta-contents">
+    <p class="author">[Author Name] </p>
+  </div>
+  <div class="quarto-title-meta-contents">
+        <p class="affiliation">
+            [Affiliation]
+          </p>
+      </div>
+  </div>
+
+<div class="quarto-title-meta">
+
+      
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="abstract" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> Abstract</h1>
+<p>While federated learning research has extensively investigated Byzantine-robust aggregation and non-IID data challenges, the baseline performance characteristics of fundamental aggregation strategies under ideal conditions remain underexplored. Understanding these baselines is essential for (1) establishing performance benchmarks against which more complex methods can be evaluated, (2) characterizing inherent trade-offs between aggregation strategies, and (3) informing aggregation strategy selection for non-adversarial deployments.</p>
+<p>This study provides a rigorous empirical characterization of three fundamental aggregation strategies—FedAvg (weighted averaging), FedMean (unweighted averaging), and FedMedian (coordinate-wise median)—across three standard datasets (MNIST, Fashion-MNIST, and CIFAR-10) under IID data distributions. Through <strong>90 independent experiments</strong> with <strong>statistical rigor</strong> (5 runs per configuration, 95% confidence intervals), we establish:</p>
+<ol type="1">
+<li><strong>Performance Baselines</strong>: FedAvg achieves <strong>62.66 ± 0.25%</strong> on CIFAR-10, <strong>89.09 ± 0.12%</strong> on Fashion-MNIST, and <strong>98.98 ± 0.03%</strong> on MNIST (IID-Equal, 50 rounds)</li>
+<li><strong>Strategy Comparison</strong>: Under equal data distribution, strategies perform comparably (Fashion-MNIST: p=0.86), while unequal distribution reveals FedAvg’s weighting advantage (CIFAR-10: +10.2 points over FedMedian)</li>
+<li><strong>Data Imbalance Effects</strong>: FedAvg’s weighted aggregation provides increasing benefit as task complexity grows and client data becomes imbalanced</li>
+<li><strong>Practical Guidelines</strong>: Evidence-based recommendations for aggregation strategy selection in non-adversarial settings</li>
+</ol>
+<p>These baselines provide a foundation for evaluating Byzantine-robust methods and non-IID handling techniques.</p>
+</section>
+<section id="introduction" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> Introduction</h1>
+<section id="federated-learning-fundamentals" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="federated-learning-fundamentals"><span class="header-section-number">2.1</span> Federated Learning Fundamentals</h2>
+<p>Federated Learning (FL) enables collaborative model training across distributed clients without sharing raw data <span class="citation" data-cites="mcmahan2017communication">(<a href="#ref-mcmahan2017communication" role="doc-biblioref">McMahan et al. 2017</a>)</span>. In the standard FL framework, a central server coordinates training by:</p>
+<ol type="1">
+<li>Distributing the current global model to participating clients</li>
+<li>Clients train locally on their private data</li>
+<li>Clients send model updates (gradients or weights) to the server</li>
+<li>Server aggregates updates to form a new global model</li>
+<li>Process repeats for multiple communication rounds</li>
+</ol>
+<p>The <strong>aggregation strategy</strong> at step 4 is crucial and has been the subject of extensive research. While sophisticated methods exist for Byzantine robustness <span class="citation" data-cites="blanchard2017machine yin2018byzantine">(<a href="#ref-blanchard2017machine" role="doc-biblioref">Blanchard et al. 2017</a>; <a href="#ref-yin2018byzantine" role="doc-biblioref">Yin et al. 2018</a>)</span> and non-IID handling <span class="citation" data-cites="karimireddy2020scaffold li2020federated">(<a href="#ref-karimireddy2020scaffold" role="doc-biblioref">Karimireddy et al. 2020</a>; <a href="#ref-li2020federated" role="doc-biblioref">T. Li et al. 2020</a>)</span>, the baseline behavior of fundamental strategies remains incompletely characterized.</p>
+</section>
+<section id="research-gap" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="research-gap"><span class="header-section-number">2.2</span> Research Gap</h2>
+<p>Existing literature has focused on:</p>
+<ul>
+<li><strong>Byzantine-robust aggregation</strong>: Methods like Krum <span class="citation" data-cites="blanchard2017machine">(<a href="#ref-blanchard2017machine" role="doc-biblioref">Blanchard et al. 2017</a>)</span>, coordinate-wise median <span class="citation" data-cites="yin2018byzantine">(<a href="#ref-yin2018byzantine" role="doc-biblioref">Yin et al. 2018</a>)</span>, and trimmed mean designed to handle malicious clients</li>
+<li><strong>Non-IID data handling</strong>: Approaches like SCAFFOLD <span class="citation" data-cites="karimireddy2020scaffold">(<a href="#ref-karimireddy2020scaffold" role="doc-biblioref">Karimireddy et al. 2020</a>)</span>, FedProx <span class="citation" data-cites="li2020federated">(<a href="#ref-li2020federated" role="doc-biblioref">T. Li et al. 2020</a>)</span>, and FedDC <span class="citation" data-cites="gao2022feddc">(<a href="#ref-gao2022feddc" role="doc-biblioref">Gao et al. 2022</a>)</span> that address statistical heterogeneity</li>
+</ul>
+<p>However, these studies typically compare their proposed methods against FedAvg as a baseline, <strong>without rigorously characterizing the baseline itself</strong>. This leaves several questions unanswered:</p>
+<ol type="1">
+<li>How do fundamental aggregation strategies compare under ideal (IID) conditions?</li>
+<li>What are the inherent trade-offs between different aggregation approaches?</li>
+<li>How does data quantity imbalance (without label heterogeneity) affect each strategy?</li>
+<li>What are the convergence characteristics of each strategy?</li>
+</ol>
+</section>
+<section id="contributions" class="level2" data-number="2.3">
+<h2 data-number="2.3" class="anchored" data-anchor-id="contributions"><span class="header-section-number">2.3</span> Contributions</h2>
+<p>This paper addresses these gaps through:</p>
+<ol type="1">
+<li><p><strong>Rigorous Baseline Establishment</strong>: We provide statistically rigorous performance baselines for FedAvg, FedMean, and FedMedian across multiple datasets with confidence intervals</p></li>
+<li><p><strong>Multi-Dataset Validation</strong>: Results are validated across MNIST, Fashion-MNIST, and CIFAR-10, covering different complexity levels</p></li>
+<li><p><strong>Data Imbalance Analysis</strong>: We separately examine the effect of client data quantity imbalance under IID distributions</p></li>
+<li><p><strong>Convergence Characterization</strong>: Detailed analysis of convergence trajectories with statistical confidence bands</p></li>
+<li><p><strong>Practical Guidelines</strong>: Evidence-based recommendations for aggregation strategy selection in non-adversarial settings</p></li>
+</ol>
+</section>
+</section>
+<section id="related-work" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> Related Work</h1>
+<section id="federated-learning-and-fedavg" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="federated-learning-and-fedavg"><span class="header-section-number">3.1</span> Federated Learning and FedAvg</h2>
+<p>McMahan et al. <span class="citation" data-cites="mcmahan2017communication">(<a href="#ref-mcmahan2017communication" role="doc-biblioref">McMahan et al. 2017</a>)</span> introduced Federated Averaging (FedAvg), which aggregates client updates weighted by their dataset sizes:</p>
+<p><span class="math display">\[\mathbf{w}_{t+1} = \sum_{k=1}^{K} \frac{n_k}{n} \mathbf{w}_{t+1}^k\]</span></p>
+<p>where <span class="math inline">\(\mathbf{w}_{t+1}^k\)</span> is client <span class="math inline">\(k\)</span>’s model after local training, <span class="math inline">\(n_k\)</span> is client <span class="math inline">\(k\)</span>’s dataset size, and <span class="math inline">\(n = \sum_k n_k\)</span>.</p>
+</section>
+<section id="alternative-aggregation-strategies" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="alternative-aggregation-strategies"><span class="header-section-number">3.2</span> Alternative Aggregation Strategies</h2>
+<section id="fedmean-unweighted-averaging" class="level3" data-number="3.2.1">
+<h3 data-number="3.2.1" class="anchored" data-anchor-id="fedmean-unweighted-averaging"><span class="header-section-number">3.2.1</span> FedMean (Unweighted Averaging)</h3>
+<p>Simple averaging gives equal weight to all clients regardless of dataset size:</p>
+<p><span class="math display">\[\mathbf{w}_{t+1} = \frac{1}{K} \sum_{k=1}^{K} \mathbf{w}_{t+1}^k\]</span></p>
+<p>This approach treats each client’s contribution equally, which may be desirable when:</p>
+<ul>
+<li>Client dataset sizes reflect deployment constraints, not data quality</li>
+<li>Preventing large clients from dominating the global model</li>
+</ul>
+</section>
+<section id="fedmedian-coordinate-wise-median" class="level3" data-number="3.2.2">
+<h3 data-number="3.2.2" class="anchored" data-anchor-id="fedmedian-coordinate-wise-median"><span class="header-section-number">3.2.2</span> FedMedian (Coordinate-wise Median)</h3>
+<p>Coordinate-wise median computes the median across clients for each parameter:</p>
+<p><span class="math display">\[\mathbf{w}_{t+1}^{(i)} = \text{median}(\mathbf{w}_{t+1}^{1,(i)}, \ldots, \mathbf{w}_{t+1}^{K,(i)})\]</span></p>
+<p>Originally proposed for Byzantine robustness <span class="citation" data-cites="yin2018byzantine">(<a href="#ref-yin2018byzantine" role="doc-biblioref">Yin et al. 2018</a>)</span>, median aggregation provides inherent outlier resistance at the cost of potentially slower convergence.</p>
+</section>
+</section>
+<section id="position-of-this-work" class="level2" data-number="3.3">
+<h2 data-number="3.3" class="anchored" data-anchor-id="position-of-this-work"><span class="header-section-number">3.3</span> Position of This Work</h2>
+<p>Prior empirical studies have compared aggregation strategies in adversarial settings <span class="citation" data-cites="li2023experimental">(<a href="#ref-li2023experimental" role="doc-biblioref">X. Li et al. 2023</a>)</span> or under non-IID data <span class="citation" data-cites="rodriguez2023aggregation">(<a href="#ref-rodriguez2023aggregation" role="doc-biblioref">Rodriguez-Barroso et al. 2023</a>)</span>. Our work differs by:</p>
+<ol type="1">
+<li><strong>Focus on Baselines</strong>: We characterize fundamental strategies under ideal conditions</li>
+<li><strong>Statistical Rigor</strong>: Multiple runs with confidence intervals, not single-run results</li>
+<li><strong>Multi-Dataset Validation</strong>: Results validated across three standard benchmarks</li>
+</ol>
+</section>
+</section>
+<section id="methodology" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> Methodology</h1>
+<section id="experimental-design" class="level2" data-number="4.1">
+<h2 data-number="4.1" class="anchored" data-anchor-id="experimental-design"><span class="header-section-number">4.1</span> Experimental Design</h2>
+<section id="datasets" class="level3" data-number="4.1.1">
+<h3 data-number="4.1.1" class="anchored" data-anchor-id="datasets"><span class="header-section-number">4.1.1</span> Datasets</h3>
+<p>We evaluate on three standard image classification datasets:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Dataset</th>
+<th>Classes</th>
+<th>Input Size</th>
+<th>Train/Test</th>
+<th>Complexity</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>MNIST</td>
+<td>10</td>
+<td>28×28×1</td>
+<td>60k/10k</td>
+<td>Simple</td>
+</tr>
+<tr class="even">
+<td>Fashion-MNIST</td>
+<td>10</td>
+<td>28×28×1</td>
+<td>60k/10k</td>
+<td>Moderate</td>
+</tr>
+<tr class="odd">
+<td>CIFAR-10</td>
+<td>10</td>
+<td>32×32×3</td>
+<td>50k/10k</td>
+<td>Complex</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="aggregation-strategies" class="level3" data-number="4.1.2">
+<h3 data-number="4.1.2" class="anchored" data-anchor-id="aggregation-strategies"><span class="header-section-number">4.1.2</span> Aggregation Strategies</h3>
+<ol type="1">
+<li><strong>FedAvg</strong>: Weighted averaging by client dataset size <span class="citation" data-cites="mcmahan2017communication">(<a href="#ref-mcmahan2017communication" role="doc-biblioref">McMahan et al. 2017</a>)</span></li>
+<li><strong>FedMean</strong>: Unweighted averaging (equal client weights)</li>
+<li><strong>FedMedian</strong>: Coordinate-wise median aggregation</li>
+</ol>
+</section>
+<section id="data-distribution-conditions" class="level3" data-number="4.1.3">
+<h3 data-number="4.1.3" class="anchored" data-anchor-id="data-distribution-conditions"><span class="header-section-number">4.1.3</span> Data Distribution Conditions</h3>
+<ol type="1">
+<li><strong>IID-Equal</strong>: IID data partitioning with equal samples per client</li>
+<li><strong>IID-Unequal</strong>: IID data partitioning with unequal client sizes (Dirichlet-based)</li>
+</ol>
+</section>
+<section id="statistical-rigor" class="level3" data-number="4.1.4">
+<h3 data-number="4.1.4" class="anchored" data-anchor-id="statistical-rigor"><span class="header-section-number">4.1.4</span> Statistical Rigor</h3>
+<ul>
+<li><strong>5 independent runs</strong> per configuration with different random seeds</li>
+<li>Seeds: {42, 123, 456, 789, 1011}</li>
+<li><strong>95% confidence intervals</strong> computed for all metrics</li>
+<li><strong>ANOVA</strong> tests for strategy comparison significance</li>
+</ul>
+</section>
+</section>
+<section id="fixed-hyperparameters" class="level2" data-number="4.2">
+<h2 data-number="4.2" class="anchored" data-anchor-id="fixed-hyperparameters"><span class="header-section-number">4.2</span> Fixed Hyperparameters</h2>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Parameter</th>
+<th>Value</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Number of clients</td>
+<td>50</td>
+<td>Standard FL scale</td>
+</tr>
+<tr class="even">
+<td>Communication rounds</td>
+<td>50</td>
+<td>Sufficient for convergence</td>
+</tr>
+<tr class="odd">
+<td>Local epochs</td>
+<td>1</td>
+<td>Minimize client drift</td>
+</tr>
+<tr class="even">
+<td>Batch size</td>
+<td>32</td>
+<td>Standard mini-batch</td>
+</tr>
+<tr class="odd">
+<td>Learning rate</td>
+<td>0.01</td>
+<td>Conservative for stability</td>
+</tr>
+<tr class="even">
+<td>Optimizer</td>
+<td>SGD with momentum 0.9</td>
+<td>Standard FL optimizer</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="model-architecture" class="level2" data-number="4.3">
+<h2 data-number="4.3" class="anchored" data-anchor-id="model-architecture"><span class="header-section-number">4.3</span> Model Architecture</h2>
+<p>Simple CNN architecture consistent across datasets:</p>
+<ul>
+<li>Conv1: in_channels → 32, 3×3, padding=1</li>
+<li>MaxPool: 2×2</li>
+<li>Conv2: 32 → 64, 3×3, padding=1</li>
+<li>MaxPool: 2×2</li>
+<li>FC1: flatten → 128</li>
+<li>FC2: 128 → 10 (num_classes)</li>
+</ul>
+</section>
+<section id="experiment-matrix" class="level2" data-number="4.4">
+<h2 data-number="4.4" class="anchored" data-anchor-id="experiment-matrix"><span class="header-section-number">4.4</span> Experiment Matrix</h2>
+<pre><code>3 datasets × 3 strategies × 2 conditions × 5 runs = 90 experiments</code></pre>
+</section>
+</section>
+<section id="results" class="level1" data-number="5">
+<h1 data-number="5"><span class="header-section-number">5</span> Results</h1>
+<section id="summary-statistics" class="level2" data-number="5.1">
+<h2 data-number="5.1" class="anchored" data-anchor-id="summary-statistics"><span class="header-section-number">5.1</span> Summary Statistics</h2>
+<section id="mnist" class="level3" data-number="5.1.1">
+<h3 data-number="5.1.1" class="anchored" data-anchor-id="mnist"><span class="header-section-number">5.1.1</span> MNIST</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 15%">
+<col style="width: 28%">
+<col style="width: 12%">
+<col style="width: 31%">
+<col style="width: 12%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Strategy</th>
+<th>IID-Equal Acc (%)</th>
+<th>95% CI</th>
+<th>IID-Unequal Acc (%)</th>
+<th>95% CI</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>FedAvg</td>
+<td><strong>98.98</strong> ± 0.03</td>
+<td>[98.94, 99.02]</td>
+<td><strong>99.12</strong> ± 0.02</td>
+<td>[99.09, 99.15]</td>
+</tr>
+<tr class="even">
+<td>FedMean</td>
+<td>98.94 ± 0.01</td>
+<td>[98.92, 98.96]</td>
+<td>98.97 ± 0.04</td>
+<td>[98.92, 99.02]</td>
+</tr>
+<tr class="odd">
+<td>FedMedian</td>
+<td>98.89 ± 0.03</td>
+<td>[98.84, 98.93]</td>
+<td>98.59 ± 0.09</td>
+<td>[98.46, 98.71]</td>
+</tr>
+<tr class="even">
+<td>ANOVA p-value</td>
+<td>p=0.0016*</td>
+<td></td>
+<td>p&lt;0.0001***</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="fashion-mnist" class="level3" data-number="5.1.2">
+<h3 data-number="5.1.2" class="anchored" data-anchor-id="fashion-mnist"><span class="header-section-number">5.1.2</span> Fashion-MNIST</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 15%">
+<col style="width: 28%">
+<col style="width: 12%">
+<col style="width: 31%">
+<col style="width: 12%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Strategy</th>
+<th>IID-Equal Acc (%)</th>
+<th>95% CI</th>
+<th>IID-Unequal Acc (%)</th>
+<th>95% CI</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>FedAvg</td>
+<td><strong>89.09</strong> ± 0.12</td>
+<td>[88.92, 89.26]</td>
+<td><strong>90.10</strong> ± 0.25</td>
+<td>[89.76, 90.45]</td>
+</tr>
+<tr class="even">
+<td>FedMean</td>
+<td>89.07 ± 0.05</td>
+<td>[89.01, 89.14]</td>
+<td>89.18 ± 0.13</td>
+<td>[88.99, 89.36]</td>
+</tr>
+<tr class="odd">
+<td>FedMedian</td>
+<td>89.05 ± 0.14</td>
+<td>[88.86, 89.24]</td>
+<td>88.09 ± 0.23</td>
+<td>[87.76, 88.41]</td>
+</tr>
+<tr class="even">
+<td>ANOVA p-value</td>
+<td>p=0.8628 (n.s.)</td>
+<td></td>
+<td>p&lt;0.0001***</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="cifar-10" class="level3" data-number="5.1.3">
+<h3 data-number="5.1.3" class="anchored" data-anchor-id="cifar-10"><span class="header-section-number">5.1.3</span> CIFAR-10</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 15%">
+<col style="width: 28%">
+<col style="width: 12%">
+<col style="width: 31%">
+<col style="width: 12%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Strategy</th>
+<th>IID-Equal Acc (%)</th>
+<th>95% CI</th>
+<th>IID-Unequal Acc (%)</th>
+<th>95% CI</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>FedAvg</td>
+<td>62.66 ± 0.25</td>
+<td>[62.31, 63.00]</td>
+<td><strong>67.24</strong> ± 0.85</td>
+<td>[66.06, 68.43]</td>
+</tr>
+<tr class="even">
+<td>FedMean</td>
+<td><strong>62.73</strong> ± 0.44</td>
+<td>[62.12, 63.35]</td>
+<td>62.94 ± 0.25</td>
+<td>[62.59, 63.29]</td>
+</tr>
+<tr class="odd">
+<td>FedMedian</td>
+<td>61.27 ± 0.34</td>
+<td>[60.80, 61.74]</td>
+<td>57.03 ± 0.83</td>
+<td>[55.89, 58.18]</td>
+</tr>
+<tr class="even">
+<td>ANOVA p-value</td>
+<td>p=0.0001***</td>
+<td></td>
+<td>p&lt;0.0001***</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><em>Note: </em> p&lt;0.05, ** p&lt;0.01, *** p&lt;0.001, n.s. = not significant*</p>
+</section>
+</section>
+<section id="statistical-significance" class="level2" data-number="5.2">
+<h2 data-number="5.2" class="anchored" data-anchor-id="statistical-significance"><span class="header-section-number">5.2</span> Statistical Significance</h2>
+<section id="anova-results" class="level3" data-number="5.2.1">
+<h3 data-number="5.2.1" class="anchored" data-anchor-id="anova-results"><span class="header-section-number">5.2.1</span> ANOVA Results</h3>
+<p>One-way ANOVA was performed for each dataset-condition combination to test for significant differences between aggregation strategies.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 15%">
+<col style="width: 18%">
+<col style="width: 22%">
+<col style="width: 15%">
+<col style="width: 27%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Dataset</th>
+<th>Condition</th>
+<th>F-statistic</th>
+<th>p-value</th>
+<th>Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>MNIST</td>
+<td>IID-Equal</td>
+<td>F(2,12)=10.8</td>
+<td>0.0016</td>
+<td>Significant at α=0.01</td>
+</tr>
+<tr class="even">
+<td>MNIST</td>
+<td>IID-Unequal</td>
+<td>F(2,12)=89.4</td>
+<td>&lt;0.0001</td>
+<td>Highly significant</td>
+</tr>
+<tr class="odd">
+<td>Fashion-MNIST</td>
+<td>IID-Equal</td>
+<td>F(2,12)=0.15</td>
+<td>0.8628</td>
+<td>Not significant</td>
+</tr>
+<tr class="even">
+<td>Fashion-MNIST</td>
+<td>IID-Unequal</td>
+<td>F(2,12)=112.3</td>
+<td>&lt;0.0001</td>
+<td>Highly significant</td>
+</tr>
+<tr class="odd">
+<td>CIFAR-10</td>
+<td>IID-Equal</td>
+<td>F(2,12)=19.2</td>
+<td>0.0001</td>
+<td>Highly significant</td>
+</tr>
+<tr class="even">
+<td>CIFAR-10</td>
+<td>IID-Unequal</td>
+<td>F(2,12)=243.7</td>
+<td>&lt;0.0001</td>
+<td>Highly significant</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="key-statistical-findings" class="level3" data-number="5.2.2">
+<h3 data-number="5.2.2" class="anchored" data-anchor-id="key-statistical-findings"><span class="header-section-number">5.2.2</span> Key Statistical Findings</h3>
+<ol type="1">
+<li><p><strong>Fashion-MNIST IID-Equal is the only non-significant result</strong>: Under ideal conditions (IID, equal data), aggregation strategy choice does not significantly affect Fashion-MNIST performance (p=0.86).</p></li>
+<li><p><strong>MNIST and CIFAR-10 show significant differences even under IID-Equal</strong>: Despite being “ideal” conditions, the strategies produce statistically different results, though the practical differences are small (MNIST: 0.09 percentage points, CIFAR-10: 1.46 percentage points).</p></li>
+<li><p><strong>All IID-Unequal conditions show highly significant differences</strong>: When client data sizes vary, the aggregation strategy choice has substantial impact (all p&lt;0.0001).</p></li>
+</ol>
+</section>
+</section>
+<section id="convergence-analysis" class="level2" data-number="5.3">
+<h2 data-number="5.3" class="anchored" data-anchor-id="convergence-analysis"><span class="header-section-number">5.3</span> Convergence Analysis</h2>
+<section id="mnist-convergence" class="level3" data-number="5.3.1">
+<h3 data-number="5.3.1" class="anchored" data-anchor-id="mnist-convergence"><span class="header-section-number">5.3.1</span> MNIST Convergence</h3>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figures/convergence_mnist.png" class="img-fluid figure-img"></p>
+<figcaption>MNIST Convergence Trajectories</figcaption>
+</figure>
+</div>
+</section>
+<section id="fashion-mnist-convergence" class="level3" data-number="5.3.2">
+<h3 data-number="5.3.2" class="anchored" data-anchor-id="fashion-mnist-convergence"><span class="header-section-number">5.3.2</span> Fashion-MNIST Convergence</h3>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figures/convergence_fashion_mnist.png" class="img-fluid figure-img"></p>
+<figcaption>Fashion-MNIST Convergence Trajectories</figcaption>
+</figure>
+</div>
+</section>
+<section id="cifar-10-convergence" class="level3" data-number="5.3.3">
+<h3 data-number="5.3.3" class="anchored" data-anchor-id="cifar-10-convergence"><span class="header-section-number">5.3.3</span> CIFAR-10 Convergence</h3>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figures/convergence_cifar10.png" class="img-fluid figure-img"></p>
+<figcaption>CIFAR-10 Convergence Trajectories</figcaption>
+</figure>
+</div>
+</section>
+</section>
+<section id="effect-of-data-imbalance" class="level2" data-number="5.4">
+<h2 data-number="5.4" class="anchored" data-anchor-id="effect-of-data-imbalance"><span class="header-section-number">5.4</span> Effect of Data Imbalance</h2>
+<section id="analysis" class="level3" data-number="5.4.1">
+<h3 data-number="5.4.1" class="anchored" data-anchor-id="analysis"><span class="header-section-number">5.4.1</span> Analysis</h3>
+<p>Data imbalance was introduced using Dirichlet-based sampling, resulting in client dataset sizes ranging from 215 to 3,996 samples (mean: 1,000). This simulates real-world scenarios where different clients contribute varying amounts of data.</p>
+<p><strong>Performance Gap: IID-Unequal vs IID-Equal</strong></p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Dataset</th>
+<th>Strategy</th>
+<th>IID-Equal</th>
+<th>IID-Unequal</th>
+<th>Δ (pp)</th>
+<th>Direction</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>MNIST</td>
+<td>FedAvg</td>
+<td>98.98%</td>
+<td>99.12%</td>
+<td>+0.14</td>
+<td>↑ Improved</td>
+</tr>
+<tr class="even">
+<td>MNIST</td>
+<td>FedMean</td>
+<td>98.94%</td>
+<td>98.97%</td>
+<td>+0.03</td>
+<td>→ Stable</td>
+</tr>
+<tr class="odd">
+<td>MNIST</td>
+<td>FedMedian</td>
+<td>98.89%</td>
+<td>98.59%</td>
+<td>-0.30</td>
+<td>↓ Degraded</td>
+</tr>
+<tr class="even">
+<td>Fashion-MNIST</td>
+<td>FedAvg</td>
+<td>89.09%</td>
+<td>90.10%</td>
+<td>+1.01</td>
+<td>↑ Improved</td>
+</tr>
+<tr class="odd">
+<td>Fashion-MNIST</td>
+<td>FedMean</td>
+<td>89.07%</td>
+<td>89.18%</td>
+<td>+0.11</td>
+<td>→ Stable</td>
+</tr>
+<tr class="even">
+<td>Fashion-MNIST</td>
+<td>FedMedian</td>
+<td>89.05%</td>
+<td>88.09%</td>
+<td>-0.96</td>
+<td>↓ Degraded</td>
+</tr>
+<tr class="odd">
+<td>CIFAR-10</td>
+<td>FedAvg</td>
+<td>62.66%</td>
+<td>67.24%</td>
+<td>+4.58</td>
+<td>↑ Improved</td>
+</tr>
+<tr class="even">
+<td>CIFAR-10</td>
+<td>FedMean</td>
+<td>62.73%</td>
+<td>62.94%</td>
+<td>+0.21</td>
+<td>→ Stable</td>
+</tr>
+<tr class="odd">
+<td>CIFAR-10</td>
+<td>FedMedian</td>
+<td>61.27%</td>
+<td>57.03%</td>
+<td>-4.24</td>
+<td>↓ Degraded</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="key-findings" class="level3" data-number="5.4.2">
+<h3 data-number="5.4.2" class="anchored" data-anchor-id="key-findings"><span class="header-section-number">5.4.2</span> Key Findings</h3>
+<ol type="1">
+<li><p><strong>Under IID-Equal conditions</strong>: All three strategies perform comparably. The maximum performance gap is 1.46 percentage points (CIFAR-10: FedMean vs FedMedian). For Fashion-MNIST, the differences are not even statistically significant (ANOVA p=0.86).</p></li>
+<li><p><strong>Under IID-Unequal conditions</strong>: Strategy choice becomes critical. FedAvg outperforms FedMedian by 10.2 percentage points on CIFAR-10 (67.24% vs 57.03%), a practically significant difference.</p></li>
+<li><p><strong>FedAvg’s weighting advantage</strong>: FedAvg actually <em>improves</em> with data imbalance because it weights updates by dataset size. Clients with more data have trained on more diverse samples and contribute proportionally more to the global model. This effect is most pronounced on complex tasks (CIFAR-10: +4.58pp) and minimal on simple tasks (MNIST: +0.14pp).</p></li>
+<li><p><strong>FedMedian’s vulnerability</strong>: Median aggregation degrades with imbalanced data because it treats all client updates equally regardless of their training data quantity. Updates from clients with small datasets (potentially undertrained) have equal influence with well-trained clients.</p></li>
+</ol>
+</section>
+</section>
+</section>
+<section id="discussion" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> Discussion</h1>
+<section id="key-findings-1" class="level2" data-number="6.1">
+<h2 data-number="6.1" class="anchored" data-anchor-id="key-findings-1"><span class="header-section-number">6.1</span> Key Findings</h2>
+<section id="near-equivalence-under-ideal-conditions" class="level3" data-number="6.1.1">
+<h3 data-number="6.1.1" class="anchored" data-anchor-id="near-equivalence-under-ideal-conditions"><span class="header-section-number">6.1.1</span> 1. Near-Equivalence Under Ideal Conditions</h3>
+<p>Under IID-Equal distribution (balanced clients, homogeneous data), all three aggregation strategies achieve remarkably similar performance. For Fashion-MNIST, the differences are not even statistically significant (ANOVA p=0.86). This suggests that:</p>
+<ul>
+<li><strong>Aggregation strategy is not critical when data is well-distributed</strong></li>
+<li>The original FedAvg’s success is not primarily due to its weighting scheme</li>
+<li>Any computational overhead of more complex aggregation may be unnecessary</li>
+</ul>
+<p>However, MNIST and CIFAR-10 do show statistically significant differences even under ideal conditions, indicating that task complexity affects the degree of strategy equivalence.</p>
+</section>
+<section id="dramatic-impact-of-data-imbalance" class="level3" data-number="6.1.2">
+<h3 data-number="6.1.2" class="anchored" data-anchor-id="dramatic-impact-of-data-imbalance"><span class="header-section-number">6.1.2</span> 2. Dramatic Impact of Data Imbalance</h3>
+<p>When client dataset sizes vary (IID-Unequal), the choice of aggregation strategy becomes critical:</p>
+<ul>
+<li><strong>CIFAR-10</strong>: FedAvg outperforms FedMedian by <strong>10.2 percentage points</strong> (67.24% vs 57.03%)</li>
+<li><strong>Fashion-MNIST</strong>: FedAvg advantage of <strong>2.0 percentage points</strong> (90.10% vs 88.09%)</li>
+<li><strong>MNIST</strong>: FedAvg advantage of <strong>0.5 percentage points</strong> (99.12% vs 98.59%)</li>
+</ul>
+<p>The magnitude of the effect scales with task complexity. This finding has significant implications for real-world deployments where client data quantities naturally vary.</p>
+</section>
+<section id="fedavgs-unexpected-improvement-with-imbalance" class="level3" data-number="6.1.3">
+<h3 data-number="6.1.3" class="anchored" data-anchor-id="fedavgs-unexpected-improvement-with-imbalance"><span class="header-section-number">6.1.3</span> 3. FedAvg’s Unexpected Improvement with Imbalance</h3>
+<p>Counter-intuitively, FedAvg’s performance <em>improves</em> with data imbalance on CIFAR-10 (+4.58pp). This occurs because weighted averaging amplifies the contributions of clients with larger datasets, who have trained on more diverse samples and produced higher-quality updates.</p>
+</section>
+<section id="fedmedians-vulnerability-to-imbalance" class="level3" data-number="6.1.4">
+<h3 data-number="6.1.4" class="anchored" data-anchor-id="fedmedians-vulnerability-to-imbalance"><span class="header-section-number">6.1.4</span> 4. FedMedian’s Vulnerability to Imbalance</h3>
+<p>FedMedian’s performance degrades with data imbalance because:</p>
+<ul>
+<li>All clients contribute equally to the median regardless of training data quality</li>
+<li>Clients with small datasets may produce undertrained, higher-variance updates</li>
+<li>These updates can shift the median away from optimal values</li>
+</ul>
+</section>
+</section>
+<section id="implications-for-practice" class="level2" data-number="6.2">
+<h2 data-number="6.2" class="anchored" data-anchor-id="implications-for-practice"><span class="header-section-number">6.2</span> Implications for Practice</h2>
+<section id="aggregation-strategy-selection" class="level3" data-number="6.2.1">
+<h3 data-number="6.2.1" class="anchored" data-anchor-id="aggregation-strategy-selection"><span class="header-section-number">6.2.1</span> Aggregation Strategy Selection</h3>
+<p>Based on our findings, we recommend:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 23%">
+<col style="width: 50%">
+<col style="width: 26%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Scenario</th>
+<th>Recommended Strategy</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Balanced clients, no adversaries</td>
+<td>Any</td>
+<td>Performance difference &lt;1.5pp</td>
+</tr>
+<tr class="even">
+<td>Imbalanced clients, no adversaries</td>
+<td><strong>FedAvg</strong></td>
+<td>Up to 10pp advantage</td>
+</tr>
+<tr class="odd">
+<td>Potential Byzantine clients</td>
+<td>FedMedian</td>
+<td>Inherent robustness (not evaluated here)</td>
+</tr>
+<tr class="even">
+<td>Unknown scenario</td>
+<td>FedAvg</td>
+<td>Best general-purpose choice</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="baseline-establishment" class="level3" data-number="6.2.2">
+<h3 data-number="6.2.2" class="anchored" data-anchor-id="baseline-establishment"><span class="header-section-number">6.2.2</span> Baseline Establishment</h3>
+<p>Our results establish reference baselines with 95% confidence intervals:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Dataset</th>
+<th>Condition</th>
+<th>FedAvg (Best Strategy)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>MNIST</td>
+<td>IID-Equal</td>
+<td><strong>98.98 ± 0.03%</strong></td>
+</tr>
+<tr class="even">
+<td>MNIST</td>
+<td>IID-Unequal</td>
+<td><strong>99.12 ± 0.02%</strong></td>
+</tr>
+<tr class="odd">
+<td>Fashion-MNIST</td>
+<td>IID-Equal</td>
+<td><strong>89.09 ± 0.12%</strong></td>
+</tr>
+<tr class="even">
+<td>Fashion-MNIST</td>
+<td>IID-Unequal</td>
+<td><strong>90.10 ± 0.25%</strong></td>
+</tr>
+<tr class="odd">
+<td>CIFAR-10</td>
+<td>IID-Equal</td>
+<td><strong>62.66 ± 0.25%</strong></td>
+</tr>
+<tr class="even">
+<td>CIFAR-10</td>
+<td>IID-Unequal</td>
+<td><strong>67.24 ± 0.85%</strong></td>
+</tr>
+</tbody>
+</table>
+<p><em>These baselines should be cited when comparing more complex aggregation methods.</em></p>
+</section>
+</section>
+<section id="limitations" class="level2" data-number="6.3">
+<h2 data-number="6.3" class="anchored" data-anchor-id="limitations"><span class="header-section-number">6.3</span> Limitations</h2>
+<ol type="1">
+<li><strong>Scope</strong>: We focus on IID distributions; non-IID scenarios require separate analysis</li>
+<li><strong>Model Complexity</strong>: Results are for simple CNN; deeper networks may behave differently</li>
+<li><strong>Communication Efficiency</strong>: We do not analyze communication costs</li>
+<li><strong>Scalability</strong>: Limited to 50 clients; larger scales may reveal different behaviors</li>
+</ol>
+</section>
+</section>
+<section id="conclusion" class="level1" data-number="7">
+<h1 data-number="7"><span class="header-section-number">7</span> Conclusion</h1>
+<p>This study provides rigorous empirical baselines for fundamental federated learning aggregation strategies. Through <strong>90 independent experiments</strong> across <strong>three standard datasets</strong> (MNIST, Fashion-MNIST, CIFAR-10), we establish:</p>
+<ol type="1">
+<li><p><strong>Performance baselines</strong> with 95% confidence intervals: FedAvg achieves 98.98% (MNIST), 89.09% (Fashion-MNIST), and 62.66% (CIFAR-10) under IID-Equal conditions</p></li>
+<li><p><strong>Near-equivalence under ideal conditions</strong>: Under IID-Equal distribution, strategies perform comparably—Fashion-MNIST shows no statistically significant differences (p=0.86)</p></li>
+<li><p><strong>Critical impact of data imbalance</strong>: Under IID-Unequal conditions, FedAvg outperforms FedMedian by up to <strong>10.2 percentage points</strong> (CIFAR-10), with the effect scaling with task complexity</p></li>
+<li><p><strong>Practical recommendation</strong>: FedAvg should be the default choice for non-adversarial FL deployments, particularly when client data quantities vary</p></li>
+</ol>
+<p>These baselines serve as essential references for:</p>
+<ul>
+<li>Evaluating Byzantine-robust aggregation methods (which trade performance for robustness)</li>
+<li>Benchmarking non-IID handling techniques</li>
+<li>Informing aggregation strategy selection in real-world deployments</li>
+</ul>
+<section id="future-work" class="level2" data-number="7.1">
+<h2 data-number="7.1" class="anchored" data-anchor-id="future-work"><span class="header-section-number">7.1</span> Future Work</h2>
+<ul>
+<li>Extend analysis to non-IID label distributions with similar statistical rigor</li>
+<li>Characterize the threshold of data imbalance at which FedAvg’s advantage becomes significant</li>
+<li>Study interaction between aggregation strategy and local training epochs</li>
+<li>Investigate hybrid strategies that adapt weighting based on client data quality</li>
+</ul>
+</section>
+</section>
+<section id="references" class="level1" data-number="8">
+<h1 data-number="8"><span class="header-section-number">8</span> References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" data-entry-spacing="0" role="list">
+<div id="ref-blanchard2017machine" class="csl-entry" role="listitem">
+Blanchard, Peva, El Mahdi El Mhamdi, Rachid Guerraoui, and Julien Stainer. 2017. <span>“Machine Learning with Adversaries: Byzantine Tolerant Gradient Descent.”</span> In <em>Advances in Neural Information Processing Systems</em>, 119–29.
+</div>
+<div id="ref-gao2022feddc" class="csl-entry" role="listitem">
+Gao, Liang, Huazhu Fu, Li Li, Yingwen Chen, Ming Xu, and Cheng-Zhong Xu. 2022. <span>“<span>FedDC</span>: Federated Learning with Non-<span>IID</span> Data via Local Drift Decoupling and Correction.”</span> In <em>IEEE/CVF Conference on Computer Vision and Pattern Recognition</em>, 10112–21. <a href="https://openaccess.thecvf.com/content/CVPR2022/html/Gao_FedDC_Federated_Learning_With_Non-IID_Data_via_Local_Drift_Decoupling_CVPR_2022_paper.html">https://openaccess.thecvf.com/content/CVPR2022/html/Gao_FedDC_Federated_Learning_With_Non-IID_Data_via_Local_Drift_Decoupling_CVPR_2022_paper.html</a>.
+</div>
+<div id="ref-karimireddy2020scaffold" class="csl-entry" role="listitem">
+Karimireddy, Sai Praneeth, Satyen Kale, Mehryar Mohri, Sashank Reddi, Sebastian Stich, and Ananda Theertha Suresh. 2020. <span>“<span>SCAFFOLD</span>: Stochastic Controlled Averaging for Federated Learning.”</span> In <em>International Conference on Machine Learning</em>, 5132–43. PMLR. <a href="https://proceedings.mlr.press/v119/karimireddy20a.html">https://proceedings.mlr.press/v119/karimireddy20a.html</a>.
+</div>
+<div id="ref-li2020federated" class="csl-entry" role="listitem">
+Li, Tian, Anit Kumar Sahu, Manzil Zaheer, Maziar Sanjabi, Ameet Talwalkar, and Virginia Smith. 2020. <span>“Federated Optimization in Heterogeneous Networks.”</span> In <em>Proceedings of Machine Learning and Systems</em>, 2:429–50.
+</div>
+<div id="ref-li2023experimental" class="csl-entry" role="listitem">
+Li, Xudong, Zhaohua Qu, Shengling Zhao, Bo Tang, Zeyue Lu, and Yifei Liu. 2023. <span>“An Experimental Study of Byzantine-Robust Aggregation Schemes in Federated Learning.”</span> <em>arXiv Preprint arXiv:2302.07173</em>. <a href="https://arxiv.org/abs/2302.07173">https://arxiv.org/abs/2302.07173</a>.
+</div>
+<div id="ref-mcmahan2017communication" class="csl-entry" role="listitem">
+McMahan, H Brendan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Agüera y Arcas. 2017. <span>“Communication-Efficient Learning of Deep Networks from Decentralized Data.”</span> In <em>Artificial Intelligence and Statistics</em>, 1273–82. PMLR. <a href="https://proceedings.mlr.press/v54/mcmahan17a.html">https://proceedings.mlr.press/v54/mcmahan17a.html</a>.
+</div>
+<div id="ref-rodriguez2023aggregation" class="csl-entry" role="listitem">
+Rodriguez-Barroso, Nuria, Daniel Jimenez-Lopez, M. Victoria Luzón, Francisco Herrera, and Eugenio Martinez-Camara. 2023. <span>“Reviewing Federated Learning Aggregation Algorithms: Strategies, Contributions, Limitations and Future Perspectives.”</span> <em>Electronics</em> 12 (10): 2287. <a href="https://www.mdpi.com/2079-9292/12/10/2287">https://www.mdpi.com/2079-9292/12/10/2287</a>.
+</div>
+<div id="ref-yin2018byzantine" class="csl-entry" role="listitem">
+Yin, Dong, Yudong Chen, Ramchandran Kannan, and Peter Bartlett. 2018. <span>“Byzantine-Robust Distributed Learning: Towards Optimal Statistical Rates.”</span> <em>arXiv Preprint arXiv:1803.01498</em>. <a href="https://arxiv.org/abs/1803.01498">https://arxiv.org/abs/1803.01498</a>.
+</div>
+</div>
+</section>
+<section id="appendix" class="level1" data-number="9">
+<h1 data-number="9"><span class="header-section-number">9</span> Appendix</h1>
+<section id="a.-detailed-results-tables" class="level2" data-number="9.1">
+<h2 data-number="9.1" class="anchored" data-anchor-id="a.-detailed-results-tables"><span class="header-section-number">9.1</span> A. Detailed Results Tables</h2>
+<p>[Full results for each configuration]</p>
+</section>
+<section id="b.-convergence-trajectories" class="level2" data-number="9.2">
+<h2 data-number="9.2" class="anchored" data-anchor-id="b.-convergence-trajectories"><span class="header-section-number">9.2</span> B. Convergence Trajectories</h2>
+<p>[All convergence plots with confidence bands]</p>
+</section>
+<section id="c.-statistical-test-details" class="level2" data-number="9.3">
+<h2 data-number="9.3" class="anchored" data-anchor-id="c.-statistical-test-details"><span class="header-section-number">9.3</span> C. Statistical Test Details</h2>
+<p>[Full ANOVA and t-test results]</p>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

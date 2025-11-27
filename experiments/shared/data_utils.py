@@ -1,5 +1,10 @@
 """
 Data loading and partitioning utilities.
+
+Supports:
+- MNIST (28x28 grayscale, 10 classes)
+- Fashion-MNIST (28x28 grayscale, 10 classes)
+- CIFAR-10 (32x32 RGB, 10 classes)
 """
 
 # Suppress PyTorch pin_memory deprecation warnings (from PyTorch internals)
@@ -10,8 +15,120 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, Subset
 from torchvision import datasets, transforms
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from collections import defaultdict
+
+
+# Dataset metadata for reference
+DATASET_INFO = {
+    'mnist': {
+        'num_classes': 10,
+        'input_channels': 1,
+        'input_size': (28, 28),
+        'train_samples': 60000,
+        'test_samples': 10000,
+    },
+    'fashion_mnist': {
+        'num_classes': 10,
+        'input_channels': 1,
+        'input_size': (28, 28),
+        'train_samples': 60000,
+        'test_samples': 10000,
+    },
+    'cifar10': {
+        'num_classes': 10,
+        'input_channels': 3,
+        'input_size': (32, 32),
+        'train_samples': 50000,
+        'test_samples': 10000,
+    },
+}
+
+
+def load_dataset(dataset_name: str, data_dir: str = './data'):
+    """
+    Load a dataset by name.
+
+    Args:
+        dataset_name: One of 'mnist', 'fashion_mnist', 'cifar10'
+        data_dir: Directory to store/load data
+
+    Returns:
+        train_dataset, test_dataset
+    """
+    dataset_name = dataset_name.lower().replace('-', '_')
+
+    if dataset_name == 'mnist':
+        return load_mnist(data_dir)
+    elif dataset_name == 'fashion_mnist':
+        return load_fashion_mnist(data_dir)
+    elif dataset_name == 'cifar10':
+        return load_cifar10(data_dir)
+    else:
+        raise ValueError(f"Unknown dataset: {dataset_name}. "
+                        f"Supported: {list(DATASET_INFO.keys())}")
+
+
+def load_mnist(data_dir='./data'):
+    """
+    Load MNIST dataset.
+
+    Args:
+        data_dir: Directory to store/load data
+
+    Returns:
+        train_dataset, test_dataset
+    """
+    transform_train = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,)),
+    ])
+
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,)),
+    ])
+
+    train_dataset = datasets.MNIST(
+        root=data_dir, train=True, download=True, transform=transform_train
+    )
+
+    test_dataset = datasets.MNIST(
+        root=data_dir, train=False, download=True, transform=transform_test
+    )
+
+    return train_dataset, test_dataset
+
+
+def load_fashion_mnist(data_dir='./data'):
+    """
+    Load Fashion-MNIST dataset.
+
+    Args:
+        data_dir: Directory to store/load data
+
+    Returns:
+        train_dataset, test_dataset
+    """
+    transform_train = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.2860,), (0.3530,)),
+    ])
+
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.2860,), (0.3530,)),
+    ])
+
+    train_dataset = datasets.FashionMNIST(
+        root=data_dir, train=True, download=True, transform=transform_train
+    )
+
+    test_dataset = datasets.FashionMNIST(
+        root=data_dir, train=False, download=True, transform=transform_test
+    )
+
+    return train_dataset, test_dataset
 
 
 def load_cifar10(data_dir='./data'):

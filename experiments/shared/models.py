@@ -1,5 +1,9 @@
 """
 Shared model architectures for all experiment levels.
+
+Supports:
+- MNIST/Fashion-MNIST (28x28, 1 channel)
+- CIFAR-10 (32x32, 3 channels)
 """
 
 import torch
@@ -9,27 +13,39 @@ import torch.nn.functional as F
 
 class SimpleCNN(nn.Module):
     """
-    Simple CNN for CIFAR-10 classification.
+    Simple CNN for image classification.
+
+    Supports different input sizes and channels:
+    - CIFAR-10: 32x32x3 -> fc_size = 64*8*8 = 4096
+    - MNIST/Fashion-MNIST: 28x28x1 -> fc_size = 64*7*7 = 3136
 
     Architecture:
-    - Conv1: 3 -> 32 channels, 3x3 kernel
+    - Conv1: in_channels -> 32 channels, 3x3 kernel
     - Conv2: 32 -> 64 channels, 3x3 kernel
-    - FC1: 64*8*8 -> 128
-    - FC2: 128 -> 10
+    - FC1: fc_size -> 128
+    - FC2: 128 -> num_classes
     """
 
-    def __init__(self, num_classes=10):
+    def __init__(self, num_classes=10, in_channels=3, input_size=32):
         super(SimpleCNN, self).__init__()
 
+        self.in_channels = in_channels
+        self.input_size = input_size
+
         # Convolutional layers
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
 
         # Pooling
         self.pool = nn.MaxPool2d(2, 2)
 
+        # Calculate FC input size based on input dimensions
+        # After 2 pooling layers: size / 4
+        fc_size = 64 * (input_size // 4) * (input_size // 4)
+        self.fc_size = fc_size
+
         # Fully connected layers
-        self.fc1 = nn.Linear(64 * 8 * 8, 128)
+        self.fc1 = nn.Linear(fc_size, 128)
         self.fc2 = nn.Linear(128, num_classes)
 
         # Dropout for regularization
@@ -37,13 +53,13 @@ class SimpleCNN(nn.Module):
 
     def forward(self, x):
         # Conv block 1
-        x = self.pool(F.relu(self.conv1(x)))  # 32x32 -> 16x16
+        x = self.pool(F.relu(self.conv1(x)))  # size -> size/2
 
         # Conv block 2
-        x = self.pool(F.relu(self.conv2(x)))  # 16x16 -> 8x8
+        x = self.pool(F.relu(self.conv2(x)))  # size/2 -> size/4
 
         # Flatten
-        x = x.view(-1, 64 * 8 * 8)
+        x = x.view(-1, self.fc_size)
 
         # FC layers
         x = F.relu(self.fc1(x))
@@ -131,25 +147,66 @@ def create_model(model_name='cnn', **kwargs):
         raise ValueError(f"Unknown model name: {model_name}")
 
 
+def create_model_for_dataset(dataset_name: str, num_classes: int = 10):
+    """
+    Create appropriate model for a given dataset.
+
+    Args:
+        dataset_name: One of 'mnist', 'fashion_mnist', 'cifar10'
+        num_classes: Number of output classes
+
+    Returns:
+        PyTorch model configured for the dataset
+    """
+    dataset_name = dataset_name.lower().replace('-', '_')
+
+    if dataset_name in ['mnist', 'fashion_mnist']:
+        return SimpleCNN(
+            num_classes=num_classes,
+            in_channels=1,
+            input_size=28
+        )
+    elif dataset_name == 'cifar10':
+        return SimpleCNN(
+            num_classes=num_classes,
+            in_channels=3,
+            input_size=32
+        )
+    else:
+        raise ValueError(f"Unknown dataset: {dataset_name}")
+
+
 def count_parameters(model):
     """Count the number of trainable parameters in a model."""
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
 if __name__ == "__main__":
-    # Test model creation
-    print("Testing SimpleCNN:")
-    cnn = SimpleCNN()
-    print(f"  Parameters: {count_parameters(cnn):,}")
+    # Test model creation for different datasets
+    print("Testing SimpleCNN for CIFAR-10 (32x32x3):")
+    cnn_cifar = create_model_for_dataset('cifar10')
+    print(f"  Parameters: {count_parameters(cnn_cifar):,}")
+    dummy_cifar = torch.randn(4, 3, 32, 32)
+    output = cnn_cifar(dummy_cifar)
+    print(f"  Input shape: {dummy_cifar.shape}")
+    print(f"  Output shape: {output.shape}")
 
-    # Test forward pass
-    dummy_input = torch.randn(4, 3, 32, 32)
-    output = cnn(dummy_input)
-    print(f"  Input shape: {dummy_input.shape}")
+    print("\nTesting SimpleCNN for MNIST (28x28x1):")
+    cnn_mnist = create_model_for_dataset('mnist')
+    print(f"  Parameters: {count_parameters(cnn_mnist):,}")
+    dummy_mnist = torch.randn(4, 1, 28, 28)
+    output = cnn_mnist(dummy_mnist)
+    print(f"  Input shape: {dummy_mnist.shape}")
+    print(f"  Output shape: {output.shape}")
+
+    print("\nTesting SimpleCNN for Fashion-MNIST (28x28x1):")
+    cnn_fmnist = create_model_for_dataset('fashion_mnist')
+    print(f"  Parameters: {count_parameters(cnn_fmnist):,}")
+    output = cnn_fmnist(dummy_mnist)
     print(f"  Output shape: {output.shape}")
 
     print("\nTesting MLP:")
     mlp = MLP()
     print(f"  Parameters: {count_parameters(mlp):,}")
-    output = mlp(dummy_input)
+    output = mlp(dummy_cifar)
     print(f"  Output shape: {output.shape}")

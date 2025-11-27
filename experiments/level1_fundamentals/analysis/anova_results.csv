@@ -1,0 +1,7 @@
+dataset,condition,f_statistic,p_value,significant,strategies,group_means
+mnist,iid_equal,11.469964664309712,0.001641176701360729,True,"['fedavg', 'fedmean', 'fedmedian']","[98.97799999999998, 98.94399999999999, 98.886]"
+mnist,iid_unequal,96.63489361702642,3.991510566753238e-08,True,"['fedavg', 'fedmean', 'fedmedian']","[99.12, 98.968, 98.586]"
+fashion_mnist,iid_equal,0.14944567627494906,0.8627633463883324,False,"['fedavg', 'fedmean', 'fedmedian']","[89.09, 89.074, 89.048]"
+fashion_mnist,iid_unequal,91.36607249671127,5.47597668339818e-08,True,"['fedavg', 'fedmean', 'fedmedian']","[90.102, 89.176, 88.086]"
+cifar10,iid_equal,21.828127688865873,0.00010046240661709702,True,"['fedavg', 'fedmean', 'fedmedian']","[62.65599999999999, 62.733999999999995, 61.272000000000006]"
+cifar10,iid_unequal,213.93627780792153,4.1221735993183207e-10,True,"['fedavg', 'fedmean', 'fedmedian']","[67.244, 62.94, 57.032000000000004]"
