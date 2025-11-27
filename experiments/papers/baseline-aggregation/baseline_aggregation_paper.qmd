@@ -10,6 +10,8 @@ format:
     number-sections: true
     code-fold: true
     theme: cosmo
+    embed-resources: true
+    self-contained: true
   pdf:
     documentclass: article
     papersize: letter
@@ -17,6 +19,7 @@ format:
       - margin=1in
     number-sections: true
     toc: true
+    keep-tex: false
 bibliography: references.bib
 ---
 
