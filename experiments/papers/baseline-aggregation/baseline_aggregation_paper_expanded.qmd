@@ -416,7 +416,7 @@ This finding has important implications for Byzantine-robust FL: **the robustnes
 
 ### Implications for Byzantine-Robust Methods
 
-Krum [@blanchard2017machine], coordinate-wise median [@yin2018byzantine], and trimmed mean were designed for adversarial settings. Our results show that even without adversaries, these methods may underperform FedAvg when clients have imbalanced data.
+Krum [@blanchard2017machine], coordinate-wise median [@yin2018byzantine], and trimmed mean were designed for adversarial settings. Our results for coordinate-wise median (FedMedian) show that even without adversaries, this method underperforms FedAvg when clients have imbalanced data---suggesting that Byzantine-robust methods may incur a "cost of robustness" in honest-client scenarios. Whether Krum and trimmed mean exhibit similar behavior remains to be tested.
 
 **Recommendation**: Byzantine-robust methods should be evaluated against FedAvg baselines under honest-client scenarios to quantify the "cost of robustness."
 
