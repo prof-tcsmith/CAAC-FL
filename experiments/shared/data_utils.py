@@ -316,6 +316,121 @@ def partition_data_dirichlet(dataset, num_clients, alpha=0.5, seed=42):
     return client_dict
 
 
+def partition_data_dirichlet_equal(dataset, num_clients, alpha=0.5, seed=42):
+    """
+    Partition dataset into non-IID subsets with EQUAL sample counts per client.
+
+    Uses Dirichlet distribution for label heterogeneity but enforces that each
+    client receives exactly the same number of samples. This allows isolating
+    the effect of label heterogeneity from quantity heterogeneity.
+
+    Args:
+        dataset: PyTorch dataset
+        num_clients: Number of clients
+        alpha: Dirichlet concentration parameter
+               - Lower alpha = more heterogeneous label distribution
+               - alpha=0.1: highly non-IID
+               - alpha=0.5: moderately non-IID
+               - alpha=1.0: slightly non-IID
+        seed: Random seed
+
+    Returns:
+        dict: {client_id: list of indices}
+    """
+    np.random.seed(seed)
+
+    # Get labels
+    if hasattr(dataset, 'targets'):
+        labels = np.array(dataset.targets)
+    elif hasattr(dataset, 'labels'):
+        labels = np.array(dataset.labels)
+    else:
+        labels = np.array([dataset[i][1] for i in range(len(dataset))])
+
+    num_classes = len(np.unique(labels))
+    num_items = len(dataset)
+    samples_per_client = num_items // num_clients
+
+    # Group indices by class and shuffle
+    class_indices = {c: [] for c in range(num_classes)}
+    for idx, label in enumerate(labels):
+        class_indices[label].append(idx)
+
+    for c in range(num_classes):
+        np.random.shuffle(class_indices[c])
+
+    # Track how many samples remain in each class
+    class_remaining = {c: len(class_indices[c]) for c in range(num_classes)}
+    class_pointers = {c: 0 for c in range(num_classes)}
+
+    # Generate Dirichlet proportions for each client (their class preferences)
+    client_proportions = np.random.dirichlet([alpha] * num_classes, size=num_clients)
+
+    # Initialize client data indices
+    client_dict = {i: [] for i in range(num_clients)}
+
+    # Assign samples to each client
+    for client_id in range(num_clients):
+        # Calculate how many samples this client wants from each class
+        props = client_proportions[client_id]
+
+        # Scale proportions to get target counts per class
+        target_counts = (props * samples_per_client).astype(int)
+
+        # Adjust to ensure we get exactly samples_per_client
+        diff = samples_per_client - target_counts.sum()
+        if diff > 0:
+            # Add to classes with highest fractional parts
+            fractional = (props * samples_per_client) - target_counts
+            add_to = np.argsort(fractional)[-diff:]
+            target_counts[add_to] += 1
+        elif diff < 0:
+            # Remove from classes with lowest fractional parts (but > 0)
+            for _ in range(-diff):
+                candidates = np.where(target_counts > 0)[0]
+                if len(candidates) > 0:
+                    fractional = (props * samples_per_client) - target_counts
+                    remove_from = candidates[np.argmin(fractional[candidates])]
+                    target_counts[remove_from] -= 1
+
+        # Assign samples from each class
+        for class_id in range(num_classes):
+            want = target_counts[class_id]
+            available = class_remaining[class_id]
+            take = min(want, available)
+
+            if take > 0:
+                start = class_pointers[class_id]
+                end = start + take
+                client_dict[client_id].extend(class_indices[class_id][start:end])
+                class_pointers[class_id] = end
+                class_remaining[class_id] -= take
+
+            # If we couldn't get enough from this class, we need to get from others
+            shortfall = want - take
+            if shortfall > 0:
+                # Get from classes that still have samples
+                for other_class in range(num_classes):
+                    if other_class == class_id or shortfall == 0:
+                        continue
+                    other_available = class_remaining[other_class]
+                    other_take = min(shortfall, other_available)
+                    if other_take > 0:
+                        start = class_pointers[other_class]
+                        end = start + other_take
+                        client_dict[client_id].extend(
+                            class_indices[other_class][start:end]
+                        )
+                        class_pointers[other_class] = end
+                        class_remaining[other_class] -= other_take
+                        shortfall -= other_take
+
+        # Shuffle this client's data
+        np.random.shuffle(client_dict[client_id])
+
+    return client_dict
+
+
 def partition_data_power_law(dataset, num_clients, alpha=1.5, seed=42):
     """
     Partition dataset with power-law distributed sizes (for Level 5).

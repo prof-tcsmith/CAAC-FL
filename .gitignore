@@ -41,3 +41,32 @@ Thumbs.db
 # Datasets
 **/cifar-10-batches-py/
 **/data/cifar-10-batches-py/
+**/cifar-10-python.tar.gz
+**/MNIST/
+**/FashionMNIST/
+experiments/data/
+experiments/level1_fundamentals/data/
+experiments/level2_heterogeneous/data/
+experiments/level3_attacks/data/
+experiments/level4_baselines/data/
+experiments/level5a_caacfl/data/
+
+# Large experiment results (keep analysis CSVs)
+experiments/level2_heterogeneous/results/
+experiments/level3_attacks/results/
+experiments/level1_fundamentals/results/
+experiments/level4_baselines/results/
+experiments/level5a_caacfl/results/
+experiments/results/
+
+# Large experiment log files
+**/flower_experiment_log*.txt
+
+# Reference papers (too large)
+*.pdf
+
+# Experiment logs
+experiment_log_*.txt
+
+# Poster files
+poster/

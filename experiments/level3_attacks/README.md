@@ -1,169 +1,158 @@
-# Level 3: Basic Byzantine Attacks
+# Level 3: Byzantine Attack Robustness Study
 
 ## Overview
 
-Level 3 introduces Byzantine attacks to the federated learning system, testing the robustness of different aggregation methods against malicious clients.
+Level 3 evaluates the robustness of federated learning aggregation strategies against Byzantine attacks. Building on the baseline study from Level 1-2, this level tests how well different aggregation methods withstand malicious client behavior.
 
-## Objectives
+## Research Questions
 
-1. **Implement Byzantine Attacks**
-   - Random Noise Attack: Add Gaussian noise to model updates
-   - Sign Flipping Attack: Reverse the sign of gradients
+1. **RQ1**: How do aggregation strategies perform under different attack types?
+2. **RQ2**: How does robustness scale with Byzantine ratio?
+3. **RQ3**: Do targeted attacks circumvent defenses designed for untargeted attacks?
+4. **RQ4**: What is the practical trade-off between baseline performance and attack robustness?
 
-2. **Expand System Scale**
-   - Increase from 10 to 15 clients
-   - Introduce 20% Byzantine clients (3 attackers)
-   - Keep non-IID data distribution (Dirichlet α=0.5)
+## Experimental Design
 
-3. **Evaluate Robustness**
-   - Test 4 aggregation methods: FedAvg, FedMedian, Krum, Trimmed Mean
-   - Compare performance with vs. without attacks
-   - Measure attack impact on convergence
+### Strategies (from Level 1-2 findings)
 
-4. **Detection Metrics**
-   - True Positive Rate (TPR): Correctly identified Byzantine clients
-   - False Positive Rate (FPR): Honest clients misclassified as Byzantine
-   - F1 Score: Harmonic mean of precision and recall
+| Strategy | Type | Description |
+|----------|------|-------------|
+| **FedAvg** | Baseline | Weighted average, not Byzantine-robust |
+| **FedMedian** | Robust | Coordinate-wise median |
+| **FedTrimmedAvg** | Robust | Trimmed mean (β=0.2) |
+
+Note: FedAdam excluded due to catastrophic failure in baseline study.
+
+### Attacks
+
+| Attack | Type | Description |
+|--------|------|-------------|
+| **None** | Baseline | Honest client behavior |
+| **Random Noise** | Untargeted | Add Gaussian noise (σ=1.0) |
+| **Sign Flipping** | Untargeted | Reverse gradient direction |
+| **ALIE** | Targeted | A Little Is Enough - evade detection |
+| **IPM** | Targeted | Inner Product Manipulation |
+| **Label Flipping** | Data Poisoning | Simulate training on flipped labels |
+
+### Byzantine Ratios
+
+- 10% (2-3 of 25 clients)
+- 20% (5 of 25 clients)
+- 30% (7-8 of 25 clients)
+
+### Data Distributions
+
+- **IID**: Uniform random partitioning (homogeneous)
+- **Non-IID**: Dirichlet α=0.5 (heterogeneous)
+
+### Total Experiments
+
+3 strategies × 5 attacks × 3 ratios × 2 data distributions = **90 experiments**
 
 ## Configuration
 
-### System Setup
-- **Total Clients**: 15
-- **Byzantine Clients**: 3 (20%)
-- **Honest Clients**: 12 (80%)
-- **Data Distribution**: Non-IID (Dirichlet α=0.5)
-- **Rounds**: 50
-- **Local Epochs**: 5
-
-### Attack Types
-
-#### 1. Random Noise Attack
-- Adds Gaussian noise to model parameters
-- Noise scale: σ = 1.0 (configurable)
-- Goal: Disrupt convergence through random perturbations
-
-#### 2. Sign Flipping Attack
-- Reverses the sign of all gradients
-- Most destructive untargeted attack
-- Goal: Push model in opposite direction of convergence
-
-### Aggregation Methods
-
-1. **FedAvg** (Baseline, non-robust)
-   - Weighted averaging of all client updates
-   - Expected to be vulnerable to attacks
-
-2. **FedMedian** (Coordinate-wise median)
-   - Robust to outliers in each parameter
-   - Expected to resist noise but struggle with sign flipping
-
-3. **Krum** (Distance-based selection)
-   - Selects most representative client
-   - Expected to perform better with attacks than with heterogeneity
-
-4. **Trimmed Mean** (NEW)
-   - Removes top/bottom β% of updates per parameter
-   - β = 20% (matches Byzantine ratio)
-   - Theoretically robust to up to β fraction of Byzantine clients
-
-## Expected Results
-
-### Performance Predictions
-
-| Method | No Attack | Random Noise | Sign Flipping |
-|--------|-----------|--------------|---------------|
-| **FedAvg** | 70-73% | 40-50% | 10-20% |
-| **FedMedian** | 68-71% | 60-65% | 30-40% |
-| **Krum** | 65-70% | 60-68% | 55-65% |
-| **Trimmed Mean** | 68-72% | 65-70% | 60-68% |
-
-### Hypotheses
-
-1. **FedAvg Vulnerability**: Should degrade significantly under both attacks
-2. **Trimmed Mean Best**: Should maintain highest accuracy under attacks
-3. **Krum Improvement**: Should perform better than Level 2 (attacks more detectable than natural heterogeneity)
-4. **Attack Severity**: Sign Flipping > Random Noise > No Attack
+| Parameter | Value |
+|-----------|-------|
+| Dataset | CIFAR-10 |
+| Clients | 25 |
+| IID | Uniform random split |
+| Non-IID | Dirichlet α=0.5 |
+| Rounds | 50 |
+| Local Epochs | 5 |
+| Learning Rate | 0.01 |
 
 ## Files
 
 ```
 level3_attacks/
-├── README.md                      # This file
-├── IMPLEMENTATION.md              # Technical details
-├── attacks.py                     # Byzantine attack implementations
-├── trimmed_mean_strategy.py       # Trimmed Mean aggregation
-├── client.py                      # Enhanced client with attack support
-├── run_fedavg.py                  # FedAvg with attacks
-├── run_fedmedian.py               # FedMedian with attacks
-├── run_krum.py                    # Krum with attacks
-├── run_trimmed_mean.py            # Trimmed Mean with attacks
-├── analyze_results.py             # Attack impact analysis
-├── run_all.sh                     # Orchestration script
-└── results/                       # Output directory
+├── README.md                    # This file
+├── attacks.py                   # Attack implementations
+├── client.py                    # FL client with attack support
+├── run_experiments.py           # Unified experiment runner
+├── analyze_paper_results.py     # Analysis and visualization
+├── run_fedavg.py               # Legacy single-strategy runner
+├── run_fedmedian.py            # Legacy single-strategy runner
+├── run_krum.py                 # Legacy (Krum excluded from paper)
+├── run_trimmed_mean.py         # Legacy single-strategy runner
+└── results/
+    └── paper/                  # Paper experiment results
+        ├── *_result.json       # Individual experiment results
+        └── figures/            # Generated figures
 ```
 
 ## Usage
 
-### Quick Start
+### Quick Start: Run Full Study
 
 ```bash
-cd level3_attacks
-bash run_all.sh
+cd experiments/level3_attacks
+
+# Run all 45 experiments (takes several hours)
+python run_experiments.py --full_study --output_dir ./results/paper
 ```
 
-This will run all 12 experiments (4 methods × 3 attack scenarios) and generate comparative analysis.
-
-### Individual Experiments
+### Run Subset of Experiments
 
 ```bash
-# FedAvg with no attack (baseline)
-python run_fedavg.py --attack none
+# All attacks for one strategy (non-IID, default)
+python run_experiments.py --strategy fedmedian --all_attacks
 
-# FedAvg with random noise
-python run_fedavg.py --attack random_noise
+# All attacks for one strategy (IID)
+python run_experiments.py --strategy fedmedian --all_attacks --iid
 
-# FedAvg with sign flipping
-python run_fedavg.py --attack sign_flipping
+# Single experiment (non-IID)
+python run_experiments.py --strategy fedavg --attack sign_flipping --byzantine_ratio 0.2
 
-# Same pattern for other methods
-python run_fedmedian.py --attack sign_flipping
-python run_krum.py --attack random_noise
-python run_trimmed_mean.py --attack none
+# Single experiment (IID)
+python run_experiments.py --strategy fedavg --attack sign_flipping --byzantine_ratio 0.2 --iid
+
+# Quick test with fewer rounds
+python run_experiments.py --strategy fedavg --attack none --num_rounds 10
 ```
 
-### Analysis Only
+### Analyze Results
 
 ```bash
-python analyze_results.py
+python analyze_paper_results.py --results_dir ./results/paper --output_dir ./results/paper/figures
 ```
 
-## Key Differences from Level 2
+## Expected Results
 
-| Aspect | Level 2 | Level 3 |
-|--------|---------|---------|
-| **Clients** | 10 | 15 |
-| **Byzantine** | 0 | 3 (20%) |
-| **Attacks** | None | Random Noise, Sign Flipping |
-| **Aggregation Methods** | 3 | 4 (+ Trimmed Mean) |
-| **Experiments** | 3 | 12 (4 methods × 3 scenarios) |
-| **Detection Metrics** | No | Yes (TPR, FPR, F1) |
-| **Expected Runtime** | 30-45 min (CPU) | 90-120 min (CPU) |
+### Hypothesis: FedMedian Most Robust
 
-## Next Steps
+| Strategy | No Attack | Under Attack (avg) | Expected Robustness |
+|----------|-----------|-------------------|---------------------|
+| FedAvg | ~62% | ~25% | Low |
+| FedMedian | ~58% | ~50% | **High** |
+| FedTrimmedAvg | ~60% | ~42% | Medium |
 
-After Level 3 completion:
-- **Level 4**: Advanced attacks (Label Flipping, Model Poisoning) + Detection strategies
-- **Level 5**: Full CAAC-FL protocol with clustering and adaptive defense
+### Hypothesis: Targeted > Untargeted
+
+ALIE and IPM should be more effective than Random Noise and Sign Flipping against FedTrimmedAvg because they craft updates that appear statistically normal.
+
+## Paper
+
+The paper is located at:
+```
+experiments/papers/byzantine-robustness/byzantine_robustness_study.qmd
+```
+
+To render:
+```bash
+cd experiments/papers/byzantine-robustness
+quarto render byzantine_robustness_study.qmd
+```
 
 ## References
 
-- **Random Noise Attack**: Fang et al., "Local Model Poisoning Attacks to Byzantine-Robust Federated Learning," USENIX Security 2020
-- **Sign Flipping**: Baruch et al., "A Little Is Enough: Circumventing Defenses For Distributed Learning," NeurIPS 2019
-- **Trimmed Mean**: Yin et al., "Byzantine-Robust Distributed Learning: Towards Optimal Statistical Rates," ICML 2018
-- **Krum**: Blanchard et al., "Machine Learning with Adversaries: Byzantine Tolerant Gradient Descent," NeurIPS 2017
+- McMahan et al. (2017) - Communication-Efficient Learning of Deep Networks (FedAvg)
+- Yin et al. (2018) - Byzantine-Robust Distributed Learning (FedMedian, TrimmedMean)
+- Baruch et al. (2019) - A Little Is Enough (ALIE Attack)
+- Xie et al. (2020) - Fall of Empires (IPM Attack)
+- Fang et al. (2020) - Local Model Poisoning Attacks
 
 ---
 
-**Status**: Ready for implementation
+**Status**: Ready for experiments
 **Level**: 3 of 5
-**Progress**: 40% → 60% of experimental framework
+**Progress**: Framework complete, experiments pending

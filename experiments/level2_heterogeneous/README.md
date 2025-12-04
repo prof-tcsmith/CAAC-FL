@@ -1,122 +1,135 @@
-# Level 2: Heterogeneous Data Distribution
+# Level 2: Non-IID (Heterogeneous) Data Distribution
 
 ## Overview
 
-Level 2 introduces non-IID (non-independent and identically distributed) data to observe how data heterogeneity affects different aggregation strategies. This level compares three aggregation methods on heterogeneous data without Byzantine attacks.
+Level 2 extends the Level 1 baseline study to non-IID (non-independent and identically distributed) data scenarios. Using the same experimental framework as Level 1, we investigate how label heterogeneity affects the relative performance of FedAvg, FedMean, and FedMedian aggregation strategies.
 
 ## Objectives
 
-1. Understand impact of non-IID data on federated learning
-2. Compare FedAvg, FedMedian, and Krum on heterogeneous data
-3. Analyze performance degradation compared to Level 1 (IID)
-4. Measure data heterogeneity using statistical metrics
+1. Measure the impact of label heterogeneity on federated learning convergence
+2. Compare aggregation strategies under non-IID conditions
+3. Determine whether FedAvg's weighting advantage persists with heterogeneous data
+4. Quantify performance degradation from IID to non-IID scenarios
 
 ## Experimental Setup
 
-### Dataset
-- **Dataset**: CIFAR-10
-- **Distribution**: Non-IID using Dirichlet (α=0.5)
-- **Clients**: 10
-- **Heterogeneity**: ~1000× more heterogeneous than IID
-- **Training samples per client**: 2,857-8,718 (variable)
-- **Test set**: Centralized (10,000 samples)
+### Datasets
+
+Same as Level 1 for direct comparison:
+
+- **MNIST**: Handwritten digits (60,000 train, 10,000 test)
+- **Fashion-MNIST**: Fashion items (60,000 train, 10,000 test)
+- **CIFAR-10**: Color images (50,000 train, 10,000 test)
+
+### Data Partitioning
+
+Non-IID partitioning using **Dirichlet distribution**:
+
+- **Method**: Each client receives samples based on Dirichlet allocation per class
+- **Alpha (α)**: Controls heterogeneity level
+  - α = 0.1: Highly non-IID (clients have 1-2 dominant classes)
+  - α = 0.5: Moderately non-IID (default, some class imbalance)
+  - α = 1.0: Mildly non-IID (approaching IID-like)
+- **Clients**: 50 (matching Level 1)
 
 ### Model Architecture
-- **Model**: SimpleCNN (same as Level 1)
-- **Parameters**: ~545K trainable parameters
 
-### Training Configuration
-- **Rounds**: 50
-- **Local epochs per round**: 1
-- **Batch size**: 32
-- **Learning rate**: 0.01
-- **Optimizer**: SGD with momentum=0.9
-- **Client participation**: 100% (all 10 clients)
+Same models as Level 1:
 
-### Aggregation Methods
+- **MNIST/Fashion-MNIST**: SimpleMLP (784→512→256→10)
+- **CIFAR-10**: SimpleCNN (conv layers → FC layers)
 
-1. **FedAvg** (Baseline)
-   - Weighted averaging by dataset size
-   - Expected to work reasonably on non-IID data
+### Training Configuration (Matching Level 1)
 
-2. **FedMedian** (Robust)
-   - Coordinate-wise median of client updates
-   - Should be more stable than FedAvg
+| Parameter | Value |
+|-----------|-------|
+| Rounds | 50 |
+| Local epochs | 1 |
+| Batch size | 32 |
+| Learning rate | 0.01 |
+| Optimizer | SGD (momentum=0.9) |
+| Client participation | 100% |
 
-3. **Krum** (Distance-based)
-   - Selects the most representative client update
-   - May struggle with high heterogeneity
+### Aggregation Strategies
 
-## Expected Outcomes
+1. **FedAvg**: Weighted averaging by client dataset size
+2. **FedMean**: Unweighted averaging (equal weight per client)
+3. **FedMedian**: Coordinate-wise median
 
-With non-IID data (no attacks):
-- Performance degradation compared to Level 1 IID results
-- FedAvg: ~70-75% accuracy (down from ~80%)
-- FedMedian: Similar to FedAvg (~70-75%)
-- Krum: May struggle (~60-70% or lower)
-- Higher variance in convergence curves
+## Experiment Matrix
+
+For α = 0.5 (primary study):
+
+- 3 datasets × 3 strategies × 5 seeds = **45 experiments**
+
+For extended alpha study (optional):
+
+- 3 datasets × 3 strategies × 3 alpha values × 5 seeds = **135 experiments**
 
 ## Key Differences from Level 1
 
 | Aspect | Level 1 | Level 2 |
 |--------|---------|---------|
-| Data Distribution | IID | Non-IID (Dirichlet α=0.5) |
-| Heterogeneity (KL div) | ~0.0007 | ~0.75 (1000× higher) |
-| Client Data Sizes | Uniform (~5,000) | Variable (2,857-8,718) |
-| Aggregation Methods | 2 (FedAvg, FedMedian) | 3 (+ Krum) |
-| Expected Accuracy | ~75-80% | ~60-75% |
-
-## Metrics Collected
-
-- Test accuracy per round
-- Test loss per round
-- Data heterogeneity metrics (KL divergence, class imbalance)
-- Per-client class distribution
-- Convergence speed comparison
+| Label Distribution | IID | Non-IID (Dirichlet) |
+| Data Quantity | Equal or Unequal | Variable (Dirichlet) |
+| Heterogeneity (KL div) | ~0.001 | ~0.5-1.5 |
+| Primary Research Question | Quantity imbalance | Label heterogeneity |
 
 ## Files
 
-- `client.py`: Flower client (same as Level 1)
-- `krum_strategy.py`: Custom Krum implementation
-- `run_fedavg.py`: Run FedAvg with non-IID data
-- `run_fedmedian.py`: Run FedMedian with non-IID data
-- `run_krum.py`: Run Krum with non-IID data
-- `analyze_results.py`: Compare results and visualize heterogeneity
-- `run_all.sh`: Execute all experiments
+### New Unified Framework
+
+- `run_noniid_experiments.py`: Unified experiment runner for all non-IID experiments
+- `run_all_noniid.sh`: Shell script to run complete study
+- `analyze_noniid_results.py`: Results aggregation and analysis
+
+### Legacy Files (Original Implementation)
+
+- `run_fedavg.py`, `run_fedmedian.py`, `run_krum.py`: Original single-dataset runners
+- `krum_strategy.py`: Krum aggregation strategy
+- `client.py`: Original Flower client
+- `analyze_results.py`: Original analysis script
 
 ## Running Experiments
 
 ```bash
-# Run all three methods
-bash run_all.sh
+# Run all experiments (45 total, ~6-8 hours with GPU)
+bash run_all_noniid.sh
 
-# Or run individually
-python run_fedavg.py
-python run_fedmedian.py
-python run_krum.py
+# Or run specific configurations
+python run_noniid_experiments.py --dataset mnist --strategy fedavg --seed 42
 
-# Generate comparison plots
-python analyze_results.py
+# Run all seeds/strategies for one dataset
+python run_noniid_experiments.py --dataset mnist --all
+
+# Run with different alpha
+python run_noniid_experiments.py --dataset mnist --all --alpha 0.1
+
+# Analyze results
+python analyze_noniid_results.py
 ```
 
-## Success Criteria
+## Expected Outcomes
 
-- [x] All methods complete training without errors
-- [x] Heterogeneity metrics show non-IID distribution (KL div > 0.5)
-- [x] Performance degradation observed compared to Level 1
-- [x] Krum shows different behavior than FedAvg/FedMedian
-- [x] Clear visualizations showing impact of heterogeneity
+Based on federated learning literature:
 
-## Key Observations to Document
+1. **Performance degradation** from IID baseline (5-15% accuracy drop)
+2. **FedAvg may struggle** when large clients have skewed distributions
+3. **FedMedian may be more robust** to heterogeneous updates
+4. **FedMean** behavior under heterogeneity is less documented
 
-1. **Performance Gap**: How much accuracy is lost due to non-IID data?
-2. **Method Comparison**: Which aggregation handles heterogeneity best?
-3. **Convergence Patterns**: Different convergence curves across methods?
-4. **Client Variability**: Impact of variable client dataset sizes?
+## Metrics Collected
 
-## Next Steps (Level 3)
+- Test accuracy per round (full trajectory)
+- Test loss per round
+- Client data sizes (from Dirichlet allocation)
+- Heterogeneity metrics (mean KL divergence from uniform)
+- Per-client class distributions
+- Comparison with Level 1 IID baselines
 
-- Introduce Byzantine attacks (Random Noise, Sign Flipping)
-- Test robustness of aggregation methods under attack
-- Add detection metrics (TPR, FPR)
-- Expand to 15 clients with 20% Byzantine clients
+## Analysis Outputs
+
+- `analysis/summary_statistics.md`: Markdown summary tables
+- `analysis/detailed_statistics.csv`: Full statistics CSV
+- `analysis/level1_comparison.csv`: IID vs Non-IID comparison
+- Visualization plots comparing strategies and datasets

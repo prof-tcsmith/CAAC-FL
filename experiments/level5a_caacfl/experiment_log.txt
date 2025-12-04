@@ -1,0 +1,15 @@
+Running on 2 GPUs with 2 parallel workers
+======================================================================
+CAAC-FL Comprehensive Experiment Suite
+======================================================================
+Total experiments: 60
+Parallel workers: 2
+Attacks: ['none', 'sign_flipping', 'random_noise', 'alie']
+Byzantine ratios: [0.0, 0.1, 0.2, 0.3]
+Seeds: [42, 123, 456]
+Output directory: ./results/comprehensive
+======================================================================
+[1/60] Starting: caacfl_none_byz0_seed42 (GPU 0)
+[9/60] Starting: caacfl_sign_flipping_byz20_seed456 (GPU 0)
+/home/tim/miniconda3/envs/caac-fl/lib/python3.11/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
