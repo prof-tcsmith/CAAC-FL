@@ -23,29 +23,27 @@ The consequences are severe. Even a single Byzantine participant can:
 
 The Byzantine problem becomes particularly acute in healthcare due to **data heterogeneity**. Consider a federated network of hospitals:
 
+```mermaid
+flowchart TB
+    subgraph hospitals["Federated Hospital Network"]
+        ped["🏥 **Pediatric Hospital**<br/>• Children patients<br/>• Specific conditions<br/>• Unique physiology"]
+        ger["🏥 **Geriatric Center**<br/>• Elderly patients<br/>• Different physiology<br/>• Age-related conditions"]
+        onc["🏥 **Oncology Clinic**<br/>• Cancer patients<br/>• Specialized imaging<br/>• Treatment protocols"]
+    end
+
+    ped -->|"g₁ᵗ"| server
+    ger -->|"g₂ᵗ"| server
+    onc -->|"g₃ᵗ"| server
+
+    server["🖥️ **Central Server**<br/>─────────────<br/>❓ How to distinguish<br/>legitimate diversity<br/>from Byzantine attacks?"]
+
+    style ped fill:#e1f5fe
+    style ger fill:#fff3e0
+    style onc fill:#fce4ec
+    style server fill:#f5f5f5
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  Pediatric      │    │  Geriatric      │    │  Oncology       │
-│  Hospital       │    │  Center         │    │  Clinic         │
-│                 │    │                 │    │                 │
-│  - Children     │    │  - Elderly      │    │  - Cancer       │
-│  - Specific     │    │  - Different    │    │  - Specialized  │
-│    conditions   │    │    physiology   │    │    imaging      │
-└────────┬────────┘    └────────┬────────┘    └────────┬────────┘
-         │                      │                      │
-         │      Gradient Updates (Very Different!)     │
-         │                      │                      │
-         └──────────────────────┼──────────────────────┘
-                                │
-                                ▼
-                    ┌───────────────────────┐
-                    │    Central Server     │
-                    │                       │
-                    │  How to distinguish   │
-                    │  legitimate diversity │
-                    │  from attacks?        │
-                    └───────────────────────┘
-```
+
+**The challenge**: Each hospital's gradient $g_i^t$ reflects its unique patient population. These gradients are *naturally different* — not because of attacks, but because of legitimate data heterogeneity.
 
 **The fundamental problem**: Pediatric hospitals generate fundamentally different gradient updates than geriatric centers. This data heterogeneity creates natural statistical diversity that **distance-based defenses (Krum) and statistical filtering methods (Trimmed Mean) struggle to distinguish** from adversarial behavior, as they rely on population-level statistics that penalize legitimate outliers.
 
@@ -77,9 +75,8 @@ This means current defenses are **worse than useless** on heterogeneous data—t
 **Representative Methods**: Krum, Multi-Krum (Blanchard et al., 2017)
 
 **Mechanism**: Select the gradient that has minimum sum of distances to its nearest neighbors:
-```
-s(i) = Σ ||g_i - g_j||² for j in nearest n-f-2 neighbors
-```
+
+$$s(i) = \sum_{j \in \mathcal{N}_i} \|g_i - g_j\|^2 \quad \text{where } \mathcal{N}_i \text{ is the } n-f-2 \text{ nearest neighbors}$$
 
 **Failure Mode**:
 - Defines "normal" as "close to neighbors"
@@ -172,110 +169,58 @@ Clients earn trust over time through consistent non-anomalous behavior:
 
 ### 4.1 High-Level Architecture Diagram
 
+```mermaid
+flowchart TB
+    subgraph clients["Round t: Client Updates"]
+        c1["Client 1<br/>g₁ᵗ"]
+        c2["Client 2<br/>g₂ᵗ"]
+        c3["Client 3<br/>g₃ᵗ"]
+        cn["Client n<br/>gₙᵗ"]
+    end
+
+    subgraph processing["For Each Client i"]
+        subgraph profile["Step 1: Retrieve Client Profile"]
+            prof_data["ClientProfile[i]<br/>• μᵢ: EWMA mean<br/>• σᵢ: EWMA std dev<br/>• Rᵢ: Reliability [0,1]<br/>• gradient_history<br/>• sigma_history"]
+        end
+
+        subgraph anomaly["Step 2: Three-Dimensional Anomaly Detection"]
+            mag["**Magnitude**<br/>A_mag = (‖gᵢᵗ‖ - μᵢ)/(σᵢ + ε)<br/>─────────<br/>Catches: ALIE,<br/>Random noise"]
+            dir["**Directional**<br/>A_dir = 1 - avg cos(gᵢᵗ, history)<br/>─────────<br/>Catches: IPM,<br/>Sign flip"]
+            temp["**Temporal**<br/>A_temp = (σᵢᵗ - σᵢᵗ⁻ᵂ)/(σᵢᵗ⁻ᵂ + ε)<br/>─────────<br/>Catches: Slow<br/>drift attacks"]
+            composite["**Composite Score**<br/>Aᵢᵗ = w₁|A_mag| + w₂·A_dir + w₃|A_temp|"]
+        end
+
+        threshold["Step 3: Adaptive Threshold<br/>τᵢᵗ = τ_base · (1 + β · Rᵢᵗ⁻¹)<br/>• High reliability → higher τᵢ<br/>• During warmup → stricter τᵢ"]
+
+        clipping["Step 4: Soft Clipping<br/>g̃ᵢᵗ = gᵢᵗ if Aᵢᵗ ≤ τᵢᵗ<br/>g̃ᵢᵗ = gᵢᵗ · (τᵢᵗ/Aᵢᵗ) if Aᵢᵗ > τᵢᵗ"]
+
+        update["Step 5: Update Profile<br/>• μᵢᵗ = α·‖gᵢᵗ‖ + (1-α)·μᵢᵗ⁻¹<br/>• (σᵢᵗ)² = α·(‖gᵢᵗ‖-μᵢᵗ)² + (1-α)·(σᵢᵗ⁻¹)²<br/>• Rᵢᵗ = γ·𝟙[passed] + (1-γ)·Rᵢᵗ⁻¹"]
+    end
+
+    aggregation["**Weighted Aggregation**<br/>g_agg = Σᵢ (nᵢ / Σⱼnⱼ) · g̃ᵢᵗ"]
+
+    global_update["**Update Global Model**<br/>wᵗ⁺¹ = wᵗ + g_agg"]
+
+    c1 & c2 & c3 & cn --> profile
+    profile --> mag & dir & temp
+    mag & dir & temp --> composite
+    composite --> threshold
+    threshold --> clipping
+    clipping --> update
+    update --> aggregation
+    aggregation --> global_update
 ```
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                         CAAC-FL AGGREGATION PIPELINE                          ║
-╠═══════════════════════════════════════════════════════════════════════════════╣
-║                                                                               ║
-║  ┌─────────────────────────────────────────────────────────────────────────┐  ║
-║  │                    ROUND t: CLIENT UPDATES RECEIVED                      │  ║
-║  │                                                                          │  ║
-║  │   Client 1      Client 2      Client 3    ...    Client n               │  ║
-║  │   g₁ᵗ          g₂ᵗ          g₃ᵗ               gₙᵗ                      │  ║
-║  └────────┬────────────┬────────────┬──────────────────┬────────────────────┘  ║
-║           │            │            │                  │                      ║
-║           ▼            ▼            ▼                  ▼                      ║
-║  ┌────────────────────────────────────────────────────────────────────────┐   ║
-║  │                     FOR EACH CLIENT i:                                  │   ║
-║  │  ┌──────────────────────────────────────────────────────────────────┐  │   ║
-║  │  │  STEP 1: RETRIEVE CLIENT PROFILE                                  │  │   ║
-║  │  │  ┌─────────────────────────────────────────────────────────────┐ │  │   ║
-║  │  │  │  ClientProfile[i]                                            │ │  │   ║
-║  │  │  │  ├── μᵢ: EWMA mean of gradient magnitudes                   │ │  │   ║
-║  │  │  │  ├── σᵢ: EWMA std deviation of magnitudes                   │ │  │   ║
-║  │  │  │  ├── Rᵢ: Reliability score [0,1]                            │ │  │   ║
-║  │  │  │  ├── gradient_history: Recent gradients (window W)          │ │  │   ║
-║  │  │  │  └── sigma_history: Historical variance values              │ │  │   ║
-║  │  │  └─────────────────────────────────────────────────────────────┘ │  │   ║
-║  │  └──────────────────────────────────────────────────────────────────┘  │   ║
-║  │                                                                         │   ║
-║  │  ┌──────────────────────────────────────────────────────────────────┐  │   ║
-║  │  │  STEP 2: THREE-DIMENSIONAL ANOMALY DETECTION                     │  │   ║
-║  │  │                                                                   │  │   ║
-║  │  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                │  │   ║
-║  │  │  │  MAGNITUDE  │ │ DIRECTIONAL │ │  TEMPORAL   │                │  │   ║
-║  │  │  │             │ │             │ │             │                │  │   ║
-║  │  │  │  ||gᵢᵗ|| - μᵢ│ │ 1 - avg    │ │ σᵢᵗ - σᵢᵗ⁻ᵂ │                │  │   ║
-║  │  │  │ ───────────  │ │ cos(gᵢᵗ,   │ │ ───────────│                │  │   ║
-║  │  │  │   σᵢ + ε    │ │   history)  │ │  σᵢᵗ⁻ᵂ + ε │                │  │   ║
-║  │  │  │             │ │             │ │             │                │  │   ║
-║  │  │  │ Catches:    │ │ Catches:    │ │ Catches:    │                │  │   ║
-║  │  │  │ ALIE,       │ │ IPM,        │ │ Slow drift  │                │  │   ║
-║  │  │  │ Random noise│ │ Sign flip   │ │ attacks     │                │  │   ║
-║  │  │  └──────┬──────┘ └──────┬──────┘ └──────┬──────┘                │  │   ║
-║  │  │         │               │               │                       │  │   ║
-║  │  │         └───────────────┼───────────────┘                       │  │   ║
-║  │  │                         ▼                                        │  │   ║
-║  │  │            ┌────────────────────────┐                           │  │   ║
-║  │  │            │   COMPOSITE SCORE      │                           │  │   ║
-║  │  │            │                        │                           │  │   ║
-║  │  │            │ Aᵢᵗ = w₁|A_mag| +      │                           │  │   ║
-║  │  │            │       w₂·A_dir +       │                           │  │   ║
-║  │  │            │       w₃|A_temp|       │                           │  │   ║
-║  │  │            └───────────┬────────────┘                           │  │   ║
-║  │  └────────────────────────┼─────────────────────────────────────────┘  │   ║
-║  │                           ▼                                             │   ║
-║  │  ┌──────────────────────────────────────────────────────────────────┐  │   ║
-║  │  │  STEP 3: ADAPTIVE THRESHOLD COMPUTATION                          │  │   ║
-║  │  │                                                                   │  │   ║
-║  │  │          τᵢᵗ = τ_base · f(Aᵢᵗ, Rᵢᵗ)                              │  │   ║
-║  │  │                                                                   │  │   ║
-║  │  │  ┌─────────────────────────────────────────────────────────────┐ │  │   ║
-║  │  │  │  • High reliability Rᵢ → more flexibility (higher τᵢ)       │ │  │   ║
-║  │  │  │  • Low reliability Rᵢ → stricter scrutiny (lower τᵢ)        │ │  │   ║
-║  │  │  │  • During warmup: τᵢ = τ_base × warmup_factor (stricter)   │ │  │   ║
-║  │  │  └─────────────────────────────────────────────────────────────┘ │  │   ║
-║  │  └──────────────────────────────────────────────────────────────────┘  │   ║
-║  │                           │                                             │   ║
-║  │                           ▼                                             │   ║
-║  │  ┌──────────────────────────────────────────────────────────────────┐  │   ║
-║  │  │  STEP 4: SOFT CLIPPING                                            │  │   ║
-║  │  │                                                                   │  │   ║
-║  │  │       ┌─ gᵢᵗ                      if Aᵢᵗ ≤ τᵢᵗ (normal)          │  │   ║
-║  │  │  g̃ᵢᵗ = │                                                          │  │   ║
-║  │  │       └─ gᵢᵗ · (τᵢᵗ / Aᵢᵗ)        if Aᵢᵗ > τᵢᵗ (anomalous)       │  │   ║
-║  │  │                                                                   │  │   ║
-║  │  │  → Anomalous gradients are SCALED DOWN, not discarded            │  │   ║
-║  │  └──────────────────────────────────────────────────────────────────┘  │   ║
-║  │                           │                                             │   ║
-║  │                           ▼                                             │   ║
-║  │  ┌──────────────────────────────────────────────────────────────────┐  │   ║
-║  │  │  STEP 5: UPDATE PROFILE                                           │  │   ║
-║  │  │                                                                   │  │   ║
-║  │  │  • μᵢᵗ = α·||gᵢᵗ|| + (1-α)·μᵢᵗ⁻¹         (EWMA mean update)     │  │   ║
-║  │  │  • σᵢᵗ = α·(||gᵢᵗ||-μᵢᵗ)² + (1-α)·σᵢᵗ⁻¹² (EWMA variance update)│  │   ║
-║  │  │  • Rᵢᵗ = γ·1[not anomalous] + (1-γ)·Rᵢᵗ⁻¹ (reliability update)  │  │   ║
-║  │  │  • Store gradient in history                                      │  │   ║
-║  │  └──────────────────────────────────────────────────────────────────┘  │   ║
-║  └─────────────────────────────────────────────────────────────────────────┘   ║
-║                                    │                                          ║
-║                                    ▼                                          ║
-║  ┌─────────────────────────────────────────────────────────────────────────┐  ║
-║  │                     WEIGHTED AGGREGATION                                 │  ║
-║  │                                                                          │  ║
-║  │   g_aggregated = Σᵢ (nᵢ / Σⱼnⱼ) · g̃ᵢᵗ                                   │  ║
-║  │                                                                          │  ║
-║  │   (Sample-weighted average, similar to FedAvg)                          │  ║
-║  └────────────────────────────────────┬────────────────────────────────────┘  ║
-║                                       │                                       ║
-║                                       ▼                                       ║
-║  ┌─────────────────────────────────────────────────────────────────────────┐  ║
-║  │                     UPDATE GLOBAL MODEL                                  │  ║
-║  │                                                                          │  ║
-║  │   wᵗ⁺¹ = wᵗ + g_aggregated                                              │  ║
-║  └─────────────────────────────────────────────────────────────────────────┘  ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-```
+
+**Pipeline Summary:**
+
+| Step | Operation | Formula |
+|------|-----------|---------|
+| 1 | Retrieve profile | $\mu_i, \sigma_i, R_i, \text{history}$ |
+| 2 | Anomaly detection | $A_i^t = w_1\|A_{mag}\| + w_2 A_{dir} + w_3\|A_{temp}\|$ |
+| 3 | Adaptive threshold | $\tau_i^t = \tau_{base} \cdot (1 + \beta \cdot R_i^{t-1})$ |
+| 4 | Soft clipping | $\tilde{g}_i^t = g_i^t \cdot \min(1, \tau_i^t / A_i^t)$ |
+| 5 | Update profile | EWMA updates for $\mu_i^t, \sigma_i^t, R_i^t$ |
+| 6 | Aggregate | $g_{agg} = \sum_i \frac{n_i}{\sum_j n_j} \tilde{g}_i^t$ |
 
 ### 4.2 Core Components
 
@@ -295,43 +240,43 @@ class ClientProfile:
     round_count: int = 0         # Participation count
 ```
 
-**EWMA Update Formula** (lines 156-182):
-```
-μᵢᵗ = α · ||gᵢᵗ||₂ + (1 - α) · μᵢᵗ⁻¹
-(σᵢᵗ)² = α · (||gᵢᵗ||₂ - μᵢᵗ)² + (1 - α) · (σᵢᵗ⁻¹)²
-```
+**EWMA Update Formulas** (lines 156-182):
+
+$$\mu_i^t = \alpha \cdot \|g_i^t\|_2 + (1 - \alpha) \cdot \mu_i^{t-1}$$
+
+$$(\sigma_i^t)^2 = \alpha \cdot (\|g_i^t\|_2 - \mu_i^t)^2 + (1 - \alpha) \cdot (\sigma_i^{t-1})^2$$
 
 **Reliability Update Formula** (lines 184-195):
-```
-Rᵢᵗ = γ · 𝟙[Aᵢᵗ < τᵢᵗ] + (1 - γ) · Rᵢᵗ⁻¹
-```
 
-Where 𝟙 is an indicator function (1 if client passed the check, 0 otherwise).
+$$R_i^t = \gamma \cdot \mathbb{1}_{[A_i^t < \tau_i^t]} + (1 - \gamma) \cdot R_i^{t-1}$$
+
+Where $\mathbb{1}$ is an indicator function (1 if client passed the check, 0 otherwise).
 
 #### 4.2.2 AnomalyDetector (`caacfl.py:207-410`)
 
 **Magnitude Anomaly** (lines 233-252):
-```
-A_mag^{i,t} = (||gᵢᵗ||₂ - μᵢᵗ⁻¹) / (σᵢᵗ⁻¹ + ε)
-```
+
+$$A_{mag}^{i,t} = \frac{\|g_i^t\|_2 - \mu_i^{t-1}}{\sigma_i^{t-1} + \epsilon}$$
+
 This is essentially a z-score: how many standard deviations is the current gradient from this client's historical mean?
 
 **Directional Anomaly** (lines 254-306):
-```
-A_dir^{i,t} = 1 - (1/W) Σₖ cos(gᵢᵗ, gᵢᵏ)
-```
+
+$$A_{dir}^{i,t} = 1 - \frac{1}{W} \sum_{k=t-W}^{t-1} \cos(g_i^t, g_i^k)$$
+
+where $\cos(a, b) = \frac{\langle a, b \rangle}{\|a\| \cdot \|b\|}$
+
 Measures average cosine similarity with historical gradients. Also includes comparison with the global aggregated gradient (double-weighted) to catch sign-flipping attacks.
 
 **Temporal Anomaly** (lines 312-331):
-```
-A_temp^{i,t} = (σᵢᵗ - σᵢᵗ⁻ᵂ) / (σᵢᵗ⁻ᵂ + ε)
-```
+
+$$A_{temp}^{i,t} = \frac{\sigma_i^t - \sigma_i^{t-W}}{\sigma_i^{t-W} + \epsilon}$$
+
 Detects variance drift over time—has the client's behavior become more erratic?
 
 **Composite Score** (lines 333-410):
-```
-Aᵢᵗ = w₁ · |A_mag| + w₂ · A_dir + w₃ · |A_temp|
-```
+
+$$A_i^t = w_1 \cdot |A_{mag}| + w_2 \cdot A_{dir} + w_3 \cdot |A_{temp}|$$
 
 During cold-start (warmup), cross-client comparison is weighted more heavily since individual profiles haven't stabilized.
 
@@ -340,9 +285,8 @@ During cold-start (warmup), cross-client comparison is weighted more heavily sin
 The main aggregation class implements the full pipeline:
 
 **Adaptive Threshold** (lines 494-532):
-```
-τᵢᵗ = τ_base · (1 + β · Rᵢᵗ⁻¹)
-```
+
+$$\tau_i^t = \tau_{base} \cdot (1 + \beta \cdot R_i^{t-1})$$
 - Higher reliability → higher threshold (more flexibility)
 - During warmup: threshold is reduced by `warmup_factor`
 - New clients don't get reliability bonus until `min_rounds_for_trust`
@@ -475,11 +419,12 @@ CAACFLAggregator(
 CAAC-FL operates on **flattened gradient vectors**, computing a single norm and cosine similarity across all model parameters. This design choice has important implications:
 
 **How it works:**
-```
-gradient = [layer1_weights, layer1_bias, layer2_weights, ...] → single 1D vector
-norm = ||gradient||₂  → single scalar
-cosine_sim = cos(gradient_current, gradient_history) → single scalar
-```
+
+$$\text{gradient} = [\text{layer}_1, \text{layer}_2, \ldots] \rightarrow \text{single 1D vector}$$
+
+$$\text{norm} = \|g\|_2 \rightarrow \text{single scalar}$$
+
+$$\text{similarity} = \cos(g_{current}, g_{history}) \rightarrow \text{single scalar}$$
 
 **What this catches:**
 | Attack Type | Detection Mechanism | Effectiveness |
@@ -501,13 +446,16 @@ cosine_sim = cos(gradient_current, gradient_history) → single scalar
 - Massively corrupts 10 critical classification weights
 
 The aggregate metrics remain nearly normal:
-- Norm: √(9990 × normal² + 10 × malicious²) ≈ √(9990 × normal²)
-- Cosine: Dominated by 9,990 aligned components → high similarity
+
+$$\|g\|_2 = \sqrt{9990 \cdot g_{normal}^2 + 10 \cdot g_{malicious}^2} \approx \sqrt{9990 \cdot g_{normal}^2}$$
+
+$$\cos(g_{attack}, g_{honest}) \approx \frac{9990}{10000} = 0.999 \quad \text{(dominated by aligned components)}$$
 
 **Comparison with layer-aware approaches (LASA):**
+
 | Aspect | CAAC-FL (Aggregate) | LASA (Per-Layer) |
 |--------|---------------------|------------------|
-| Storage per client | O(W × P) | O(W × L) where L = layers |
+| Storage per client | $O(W \times P)$ | $O(W \times L)$ where $L$ = layers |
 | Catches layer-specific attacks | ✗ | ✓ |
 | Client-specific baselines | ✓ | ✗ |
 | Handles non-IID data | ✓ Strong | ✗ Penalizes heterogeneity |
@@ -519,23 +467,24 @@ The aggregate metrics remain nearly normal:
 
 **Key advantage of LASA**: Catches targeted attacks on specific layers that don't significantly affect aggregate statistics.
 
-A hybrid approach tracking per-layer statistics with client-specific baselines could combine both advantages but would increase storage to O(W × L) per client with per-client tracking overhead.
+A hybrid approach tracking per-layer statistics with client-specific baselines could combine both advantages but would increase storage to $O(W \times L)$ per client with per-client tracking overhead.
 
 #### 8.1.2 Server Memory Requirements
 
 CAAC-FL maintains per-client profiles on the server. The memory footprint depends heavily on model size and number of clients.
 
 **Per-client storage breakdown:**
+
 | Component | Size | Formula |
 |-----------|------|---------|
-| μ (EWMA mean) | 8 bytes | 1 float64 |
-| σ (EWMA std) | 8 bytes | 1 float64 |
-| reliability | 8 bytes | 1 float64 |
+| $\mu$ (EWMA mean) | 8 bytes | 1 float64 |
+| $\sigma$ (EWMA std) | 8 bytes | 1 float64 |
+| $R$ (reliability) | 8 bytes | 1 float64 |
 | round_count | 8 bytes | 1 int64 |
-| sigma_history | W × 8 bytes | Window × float64 |
-| **gradient_history** | **W × P × 8 bytes** | **Window × Params × float64** |
+| sigma_history | $W \times 8$ bytes | Window × float64 |
+| **gradient_history** | $\mathbf{W \times P \times 8}$ **bytes** | **Window × Params × float64** |
 
-The gradient history dominates: **Memory per client ≈ W × P × 8 bytes**
+The gradient history dominates: **Memory per client** $\approx W \times P \times 8$ **bytes**
 
 **Memory requirements for different model scales (W=10 history window):**
 
@@ -555,18 +504,19 @@ The gradient history dominates: **Memory per client ≈ W × P × 8 bytes**
 #### 8.1.3 Server Computation Requirements
 
 **Per-round computation per client:**
+
 | Operation | Complexity | Notes |
 |-----------|------------|-------|
-| Flatten gradient | O(P) | Single pass over parameters |
-| Compute norm | O(P) | Single reduction |
-| Magnitude anomaly | O(1) | Simple arithmetic |
-| Directional anomaly | O(W × P) | W cosine similarities, each O(P) |
-| Cross-client comparison | O(N × P) | N-1 cosine similarities |
-| Temporal anomaly | O(1) | Simple arithmetic |
-| EWMA updates | O(1) | Simple arithmetic |
-| Store gradient | O(P) | Memory copy |
+| Flatten gradient | $O(P)$ | Single pass over parameters |
+| Compute norm | $O(P)$ | Single reduction |
+| Magnitude anomaly | $O(1)$ | Simple arithmetic |
+| Directional anomaly | $O(W \times P)$ | $W$ cosine similarities, each $O(P)$ |
+| Cross-client comparison | $O(N \times P)$ | $N-1$ cosine similarities |
+| Temporal anomaly | $O(1)$ | Simple arithmetic |
+| EWMA updates | $O(1)$ | Simple arithmetic |
+| Store gradient | $O(P)$ | Memory copy |
 
-**Total per round: O(N × P × (W + N))** where N=clients, P=params, W=window
+**Total per round:** $O(N \times P \times (W + N))$ where $N$=clients, $P$=params, $W$=window
 
 **Estimated wall-clock time (single-threaded, modern CPU):**
 
@@ -605,44 +555,53 @@ With proper parallelization, ResNet-18 with 100 clients should complete in secon
 
 **Priority optimization: Replace gradient history window with EWMA direction vector**
 
-The current implementation stores W=10 full gradient vectors per client for directional anomaly detection. This is the dominant memory cost and may be unnecessarily expensive:
+The current implementation stores $W=10$ full gradient vectors per client for directional anomaly detection. This is the dominant memory cost and may be unnecessarily expensive:
 
 | Component | Current Approach | Proposed EWMA Approach |
 |-----------|------------------|------------------------|
-| Storage | W × P floats | 1 × P floats |
+| Storage | $W \times P$ floats | $1 \times P$ floats |
 | Memory per client (11M params) | 880 MB | 88 MB |
 | Memory for 100 clients | 88 GB | 8.8 GB |
 | Reduction | — | **10× smaller** |
 
 **Current implementation:**
+
+$$A_{dir}^{i,t} = 1 - \frac{1}{W} \sum_{k=t-W}^{t-1} \cos(g_i^t, g_i^k) \quad \text{(requires storing } W \text{ gradients)}$$
+
 ```python
 # Store W full gradients
 profile.gradient_history.append(gradient)  # deque(maxlen=10)
 
 # Compute average cosine similarity with all W
 for hist_grad in profile.gradient_history:
-    cos_sim = dot(gradient, hist_grad) / (||gradient|| × ||hist_grad||)
+    cos_sim = dot(gradient, hist_grad) / (norm(gradient) * norm(hist_grad))
 anomaly = 1 - mean(cosine_similarities)
 ```
 
 **Proposed EWMA alternative:**
+
+$$\bar{g}_i^t = \alpha \cdot g_i^t + (1 - \alpha) \cdot \bar{g}_i^{t-1} \quad \text{(single running mean)}$$
+
+$$A_{dir}^{i,t} = 1 - \cos(g_i^t, \bar{g}_i^{t-1}) \quad \text{(compare to EWMA direction)}$$
+
 ```python
 # Store single running mean gradient
-profile.mean_gradient = α * gradient + (1-α) * profile.mean_gradient
+profile.mean_gradient = alpha * gradient + (1-alpha) * profile.mean_gradient
 
 # Compute cosine similarity with EWMA direction
-cos_sim = dot(gradient, profile.mean_gradient) / (||gradient|| × ||mean_gradient||)
+cos_sim = dot(gradient, profile.mean_gradient) / (norm(gradient) * norm(mean_gradient))
 anomaly = 1 - cos_sim
 ```
 
 **Trade-offs requiring empirical validation:**
+
 | Aspect | Window (Current) | EWMA (Proposed) |
 |--------|------------------|-----------------|
-| Memory | O(W × P) | O(P) |
+| Memory | $O(W \times P)$ | $O(P)$ |
 | Detects sudden direction change | ✓ Against all recent | ✓ Against smoothed mean |
-| Robust to single outlier round | ✓ Explicit averaging | Partial (α controls smoothing) |
+| Robust to single outlier round | ✓ Explicit averaging | Partial ($\alpha$ controls smoothing) |
 | Captures directional variance | ✓ Implicitly available | ✗ Lost |
-| Computational cost | O(W × P) per client | O(P) per client |
+| Computational cost | $O(W \times P)$ per client | $O(P)$ per client |
 
 **Recommendation**: This optimization should be tested empirically to verify that detection performance is maintained. The 10× memory reduction would make CAAC-FL practical for medium-sized models (ResNet-18/50) with hundreds of clients.
 
