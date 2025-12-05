@@ -23,12 +23,12 @@ can establish malicious behavior as their "normal" baseline.
 IMPLEMENTED MITIGATIONS AND THEIR SPECIFIC VALUES:
 
 1. **Conservative Initial Thresholds**
-   - Parameter: warmup_rounds = 5 (rounds), warmup_factor = 0.5
-   - Implementation: During rounds 0-4, threshold is computed as:
+   - Parameter: warmup_rounds = 10 (rounds), warmup_factor = 0.3
+   - Implementation: During rounds 0-9, threshold is computed as:
        τ = τ_base × (warmup_factor + (1 - warmup_factor) × (round / warmup_rounds))
-     Example at round 0: τ = 2.0 × 0.5 = 1.0 (stricter)
-     Example at round 2: τ = 2.0 × (0.5 + 0.5 × 0.4) = 2.0 × 0.7 = 1.4
-     Example at round 5+: τ = 2.0 (normal base threshold)
+     Example at round 0: τ = 1.2 × 0.3 = 0.36 (stricter)
+     Example at round 5: τ = 1.2 × (0.3 + 0.7 × 0.5) = 1.2 × 0.65 = 0.78
+     Example at round 10+: τ = 1.2 (normal base threshold)
    - Rationale: Be more suspicious of all clients until profiles stabilize
    - Trade-off: Higher false positive rate in early rounds
 
@@ -55,7 +55,7 @@ IMPLEMENTED MITIGATIONS AND THEIR SPECIFIC VALUES:
    - Trade-off: Requires at least one round of history (no effect round 0)
 
 4. **Delayed Profile Trust**
-   - Parameter: min_rounds_for_trust = 3 (rounds)
+   - Parameter: min_rounds_for_trust = 5 (rounds)
    - Implementation: The reliability bonus is only applied after participation:
        if round_count >= min_rounds_for_trust:
            τ = τ × (1 + β × reliability)    # β = 0.5 default
@@ -77,16 +77,19 @@ IMPLEMENTED MITIGATIONS AND THEIR SPECIFIC VALUES:
    - Trade-off: Assumes some population homogeneity
 
 6. **New Client Weight Reduction**
-   - Parameter: new_client_weight = 0.5
+   - Parameter: new_client_weight = 0.3
    - Implementation: During aggregation, effective sample count is reduced:
        if round_count < min_rounds_for_trust:
            weight_factor = new_client_weight +
                (1 - new_client_weight) × (round_count / min_rounds_for_trust)
            effective_samples = samples × weight_factor
-     Example: round_count=0 → weight_factor=0.5 (50% contribution)
-              round_count=1 → weight_factor=0.67 (67% contribution)
-              round_count=2 → weight_factor=0.83 (83% contribution)
-              round_count=3+ → weight_factor=1.0 (full contribution)
+     Example (with min_rounds_for_trust=5):
+              round_count=0 → weight_factor=0.30 (30% contribution)
+              round_count=1 → weight_factor=0.44 (44% contribution)
+              round_count=2 → weight_factor=0.58 (58% contribution)
+              round_count=3 → weight_factor=0.72 (72% contribution)
+              round_count=4 → weight_factor=0.86 (86% contribution)
+              round_count=5+ → weight_factor=1.0 (full contribution)
    - Rationale: Limits damage from cold-start attacks
    - Trade-off: Slows down convergence contribution from legitimate new clients
 
@@ -96,12 +99,12 @@ COLD-START PARAMETER SUMMARY TABLE
 
 | Parameter            | Default | Type  | Description                        |
 |---------------------|---------|-------|-------------------------------------|
-| warmup_rounds       | 5       | int   | Rounds with conservative thresholds |
-| warmup_factor       | 0.5     | float | Threshold multiplier at round 0     |
-| min_rounds_for_trust| 3       | int   | Rounds before reliability bonus     |
+| warmup_rounds       | 10      | int   | Rounds with conservative thresholds |
+| warmup_factor       | 0.3     | float | Threshold multiplier at round 0     |
+| min_rounds_for_trust| 5       | int   | Rounds before reliability bonus     |
 | use_cross_comparison| True    | bool  | Enable cross-client comparison      |
 | use_population_init | True    | bool  | Initialize from population stats    |
-| new_client_weight   | 0.5     | float | Weight multiplier for new clients   |
+| new_client_weight   | 0.3     | float | Weight multiplier for new clients   |
 
 FUTURE DIRECTIONS (not yet implemented):
 
@@ -158,15 +161,22 @@ class ClientProfile:
     def __post_init__(self):
         """Initialize deques with proper maxlen after dataclass creation."""
         # Reinitialize deques with correct maxlen based on window_size
+        # gradient_history: stores window_size gradients for directional comparison
+        # sigma_history: needs window_size + 1 elements for temporal anomaly
+        #   (compares current sigma at [-1] with past sigma at [-(window_size+1)])
         self.gradient_history = deque(self.gradient_history, maxlen=self.window_size)
-        self.sigma_history = deque(self.sigma_history, maxlen=self.window_size)
+        self.sigma_history = deque(self.sigma_history, maxlen=self.window_size + 1)
 
     def update_ewma(self, gradient_norm: float, alpha: float = 0.1):
         """
         Update EWMA statistics with new observation.
 
         Formula 1: μ_i^t = α · ||g_i^t||_2 + (1 - α) · μ_i^{t-1}
-        Formula 2: (σ_i^t)² = α · (||g_i^t||_2 - μ_i^t)² + (1 - α) · (σ_i^{t-1})²
+        Formula 2: (σ_i^t)² = α · (||g_i^t||_2 - μ_i^{t-1})² + (1 - α) · (σ_i^{t-1})²
+
+        Note: Variance uses deviation from PREVIOUS mean (μ^{t-1}), not the
+        newly updated mean. Using the new mean would underestimate variance
+        since the new mean is already adjusted toward the observation.
 
         Args:
             gradient_norm: L2 norm of the current gradient
@@ -177,13 +187,15 @@ class ClientProfile:
             self.mu = gradient_norm
             self.sigma = 0.1  # Small initial variance
         else:
-            # EWMA update for mean
-            self.mu = alpha * gradient_norm + (1 - alpha) * self.mu
-
-            # EWMA update for variance
+            # Compute variance update FIRST using previous mean
+            # This ensures we measure deviation from expected value, not from
+            # the value after adjustment
             deviation_sq = (gradient_norm - self.mu) ** 2
             variance = alpha * deviation_sq + (1 - alpha) * (self.sigma ** 2)
             self.sigma = np.sqrt(variance)
+
+            # THEN update mean
+            self.mu = alpha * gradient_norm + (1 - alpha) * self.mu
 
         # Store sigma for temporal analysis
         self.sigma_history.append(self.sigma)
@@ -393,18 +405,32 @@ class AnomalyDetector:
                     a_cross = 1.0 - median_sim
 
         # Composite score with adaptive weighting
+        # All weight combinations are normalized to sum to 1.0 for consistent scoring
         if is_warmup or profile.round_count < 3:
             # During cold-start: heavily weight cross-client comparison
             # because individual profiles are unreliable
             if a_cross > 0:
                 # Cross-client gets 50% weight, directional 30%, magnitude 20%
+                # Weights: 0.2 + 0.3 + 0.5 = 1.0 ✓
                 composite = 0.2 * abs(a_mag) + 0.3 * a_dir + 0.5 * a_cross
             else:
                 # If no cross-client data, use directional + magnitude
+                # Weights: 0.4 + 0.6 = 1.0 ✓
                 composite = 0.4 * abs(a_mag) + 0.6 * a_dir
         else:
-            # After warmup: use full 3D scoring with moderate cross-client weight
-            composite = w_mag * abs(a_mag) + w_dir * a_dir + w_temp * abs(a_temp) + 0.2 * a_cross
+            # After warmup: use full 3D scoring with optional cross-client
+            if a_cross > 0:
+                # Scale down the 3D weights to make room for cross-client (20%)
+                # Original: w_mag=0.5, w_dir=0.3, w_temp=0.2 (sum=1.0)
+                # Scaled: 0.8 * original + 0.2 * cross = 1.0
+                scale = 0.8
+                composite = (scale * w_mag * abs(a_mag) +
+                            scale * w_dir * a_dir +
+                            scale * w_temp * abs(a_temp) +
+                            0.2 * a_cross)
+            else:
+                # No cross-client: use original weights (sum to 1.0)
+                composite = w_mag * abs(a_mag) + w_dir * a_dir + w_temp * abs(a_temp)
 
         scores = {
             'magnitude': a_mag,
@@ -626,6 +652,13 @@ class CAACFLAggregator:
         Returns:
             Tuple of (processed_gradient, stats_dict)
         """
+        # Handle unknown client_id by creating a new profile
+        if client_id not in self.profiles:
+            self.profiles[client_id] = ClientProfile(
+                client_id=client_id,
+                window_size=self.window_size
+            )
+
         profile = self.profiles[client_id]
 
         # Cold-Start Mitigation 5: Initialize new clients from population stats
@@ -651,12 +684,17 @@ class CAACFLAggregator:
             gradient, composite_score, threshold
         )
 
+        # Save round_count BEFORE updating (needed for correct weight calculation)
+        round_count_before_update = profile.round_count
+
         # Step 5: Update profile
         profile.update_ewma(gradient_norm, self.alpha)
         profile.store_gradient(gradient)
         profile.update_reliability(not is_anomalous, self.gamma)
 
         # Collect statistics
+        # Note: round_count_at_start is the count BEFORE this round's update,
+        # used for proper new client weight calculation in aggregate()
         stats = {
             'client_id': client_id,
             'num_samples': num_samples,
@@ -666,6 +704,7 @@ class CAACFLAggregator:
             'is_anomalous': is_anomalous,
             'scaling_factor': scaling,
             'reliability': profile.reliability,
+            'round_count_at_start': round_count_before_update,
             **{f'score_{k}': v for k, v in individual_scores.items()}
         }
 
@@ -690,7 +729,13 @@ class CAACFLAggregator:
 
         Returns:
             Tuple of (aggregated_gradient, list_of_client_stats)
+            Returns (None, []) if no clients provided
         """
+        # Handle empty client list
+        if not client_gradients:
+            self.current_round += 1
+            return None, []
+
         all_stats = []
         processed_gradients = {}
         processed_samples = {}
@@ -715,13 +760,22 @@ class CAACFLAggregator:
         # Weighted aggregation (FedAvg style) with new client weight reduction
         # Cold-Start Mitigation 8 (partial): Gradual Weight Ramp-Up
         # New clients contribute with reduced weight initially
+        #
+        # Build lookup of round_count_at_start from stats (before profile update)
+        round_counts = {s['client_id']: s['round_count_at_start'] for s in all_stats}
+
         effective_samples = {}
         for client_id, samples in processed_samples.items():
-            profile = self.profiles[client_id]
-            if profile.round_count < self.min_rounds_for_trust:
+            # Use round_count from BEFORE the update (stored in stats)
+            round_count = round_counts.get(client_id, 0)
+            if round_count < self.min_rounds_for_trust:
                 # New clients get reduced weight
-                weight_factor = self.new_client_weight + \
-                    (1 - self.new_client_weight) * (profile.round_count / self.min_rounds_for_trust)
+                # Protect against division by zero
+                if self.min_rounds_for_trust > 0:
+                    weight_factor = self.new_client_weight + \
+                        (1 - self.new_client_weight) * (round_count / self.min_rounds_for_trust)
+                else:
+                    weight_factor = 1.0
                 effective_samples[client_id] = samples * weight_factor
             else:
                 effective_samples[client_id] = samples
@@ -751,7 +805,8 @@ class CAACFLAggregator:
         self.round_stats.append(round_summary)
 
         # Store aggregated gradient for next round's comparison
-        self.detector.set_global_gradient(aggregated)
+        if aggregated is not None:
+            self.detector.set_global_gradient(aggregated)
 
         # Increment round counter for warmup logic
         self.current_round += 1
