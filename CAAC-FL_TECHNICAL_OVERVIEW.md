@@ -508,11 +508,18 @@ The aggregate metrics remain nearly normal:
 | Aspect | CAAC-FL (Aggregate) | LASA (Per-Layer) |
 |--------|---------------------|------------------|
 | Storage per client | O(W × P) | O(W × L) where L = layers |
-| Catches layer attacks | ✗ | ✓ |
+| Catches layer-specific attacks | ✗ | ✓ |
 | Client-specific baselines | ✓ | ✗ |
-| Catches aggregate attacks | ✓ | ✓ |
+| Handles non-IID data | ✓ Strong | ✗ Penalizes heterogeneity |
+| Temporal behavioral tracking | ✓ Per-client EWMA | ✗ No history |
+| Adaptive trust (reliability) | ✓ Earned over time | ✗ All clients equal |
+| False positives on heterogeneous data | Low | High |
 
-A hybrid approach tracking per-layer statistics with client-specific baselines could address this gap but would increase complexity.
+**Key advantage of CAAC-FL**: On heterogeneous data (e.g., pediatric vs. geriatric hospitals), LASA applies the same per-layer thresholds to all clients, incorrectly flagging specialized institutions as anomalous. CAAC-FL learns each client's "normal" and only flags deviations from *their own* baseline.
+
+**Key advantage of LASA**: Catches targeted attacks on specific layers that don't significantly affect aggregate statistics.
+
+A hybrid approach tracking per-layer statistics with client-specific baselines could combine both advantages but would increase storage to O(W × L) per client with per-client tracking overhead.
 
 #### 8.1.2 Server Memory Requirements
 
@@ -595,11 +602,55 @@ With proper parallelization, ResNet-18 with 100 clients should complete in secon
 3. **Gradient component analysis**: Use PCA or random projections to detect anomalies in subspaces
 
 #### For Memory Scalability:
+
+**Priority optimization: Replace gradient history window with EWMA direction vector**
+
+The current implementation stores W=10 full gradient vectors per client for directional anomaly detection. This is the dominant memory cost and may be unnecessarily expensive:
+
+| Component | Current Approach | Proposed EWMA Approach |
+|-----------|------------------|------------------------|
+| Storage | W × P floats | 1 × P floats |
+| Memory per client (11M params) | 880 MB | 88 MB |
+| Memory for 100 clients | 88 GB | 8.8 GB |
+| Reduction | — | **10× smaller** |
+
+**Current implementation:**
+```python
+# Store W full gradients
+profile.gradient_history.append(gradient)  # deque(maxlen=10)
+
+# Compute average cosine similarity with all W
+for hist_grad in profile.gradient_history:
+    cos_sim = dot(gradient, hist_grad) / (||gradient|| × ||hist_grad||)
+anomaly = 1 - mean(cosine_similarities)
+```
+
+**Proposed EWMA alternative:**
+```python
+# Store single running mean gradient
+profile.mean_gradient = α * gradient + (1-α) * profile.mean_gradient
+
+# Compute cosine similarity with EWMA direction
+cos_sim = dot(gradient, profile.mean_gradient) / (||gradient|| × ||mean_gradient||)
+anomaly = 1 - cos_sim
+```
+
+**Trade-offs requiring empirical validation:**
+| Aspect | Window (Current) | EWMA (Proposed) |
+|--------|------------------|-----------------|
+| Memory | O(W × P) | O(P) |
+| Detects sudden direction change | ✓ Against all recent | ✓ Against smoothed mean |
+| Robust to single outlier round | ✓ Explicit averaging | Partial (α controls smoothing) |
+| Captures directional variance | ✓ Implicitly available | ✗ Lost |
+| Computational cost | O(W × P) per client | O(P) per client |
+
+**Recommendation**: This optimization should be tested empirically to verify that detection performance is maintained. The 10× memory reduction would make CAAC-FL practical for medium-sized models (ResNet-18/50) with hundreds of clients.
+
+**Other memory optimizations:**
 1. **Gradient sketching**: Use count-min sketches or SimHash to compress gradient history
 2. **Quantized storage**: Store gradient history in int8/int16 instead of float64 (8-16× reduction)
 3. **Direction-only storage**: Store unit vectors (gradient/||gradient||) instead of full gradients
-4. **Rolling statistics**: Replace explicit history with sufficient statistics (e.g., covariance matrices)
-5. **Hierarchical profiles**: Cluster similar clients and maintain group-level profiles
+4. **Hierarchical profiles**: Cluster similar clients and maintain group-level profiles
 
 #### For Computation:
 1. **Approximate cosine similarity**: Use locality-sensitive hashing for approximate nearest-neighbor comparisons
