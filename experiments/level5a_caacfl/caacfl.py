@@ -236,13 +236,14 @@ class AnomalyDetector:
     Parameters:
         epsilon: Stability constant for division (default 1e-8)
         window_size: Number of rounds for historical comparisons (default 5)
-        weights: Tuple of (w_mag, w_dir, w_temp) weights (default equal)
+        weights: Tuple of (w_mag, w_dir, w_temp) weights (default (0.5, 0.3, 0.2))
+        use_global_comparison: Compare with global aggregated gradient (default True)
     """
 
     def __init__(self,
                  epsilon: float = 1e-8,
                  window_size: int = 5,
-                 weights: Tuple[float, float, float] = (1/3, 1/3, 1/3),
+                 weights: Tuple[float, float, float] = (0.5, 0.3, 0.2),  # Match CAACFLAggregator default
                  use_global_comparison: bool = True):
         self.epsilon = epsilon
         self.window_size = window_size
@@ -320,7 +321,9 @@ class AnomalyDetector:
             return 0.0
 
         # Average cosine similarity, convert to anomaly score
-        avg_cos = np.mean(cosine_sims[-self.window_size:])
+        # Note: gradient_history is already limited to window_size elements,
+        # so we average all collected similarities (including global comparison)
+        avg_cos = np.mean(cosine_sims)
         anomaly = 1.0 - avg_cos  # [0, 2] range
 
         return anomaly
@@ -385,6 +388,7 @@ class AnomalyDetector:
         # This is crucial for cold-start because it doesn't depend on history
         a_cross = 0.0
         median_sim = None
+        has_cross_client = False  # Flag to track if cross-client comparison was performed
         if all_gradients and len(all_gradients) > 1:
             current_norm = np.linalg.norm(gradient)
             if current_norm > self.epsilon:
@@ -403,13 +407,14 @@ class AnomalyDetector:
                     # Convert to anomaly score: negative similarity = high anomaly
                     # Range: [-1, 1] -> [2, 0] (inverted so negative = high anomaly)
                     a_cross = 1.0 - median_sim
+                    has_cross_client = True  # Cross-client comparison was successfully performed
 
         # Composite score with adaptive weighting
         # All weight combinations are normalized to sum to 1.0 for consistent scoring
         if is_warmup or profile.round_count < 3:
             # During cold-start: heavily weight cross-client comparison
             # because individual profiles are unreliable
-            if a_cross > 0:
+            if has_cross_client:
                 # Cross-client gets 50% weight, directional 30%, magnitude 20%
                 # Weights: 0.2 + 0.3 + 0.5 = 1.0 ✓
                 composite = 0.2 * abs(a_mag) + 0.3 * a_dir + 0.5 * a_cross
@@ -419,7 +424,7 @@ class AnomalyDetector:
                 composite = 0.4 * abs(a_mag) + 0.6 * a_dir
         else:
             # After warmup: use full 3D scoring with optional cross-client
-            if a_cross > 0:
+            if has_cross_client:
                 # Scale down the 3D weights to make room for cross-client (20%)
                 # Original: w_mag=0.5, w_dir=0.3, w_temp=0.2 (sum=1.0)
                 # Scaled: 0.8 * original + 0.2 * cross = 1.0
@@ -457,20 +462,20 @@ class CAACFLAggregator:
 
     Parameters:
         num_clients: Total number of clients
-        alpha: EWMA smoothing factor (default 0.1)
+        alpha: EWMA smoothing factor (default 0.05)
         gamma: Reliability update rate (default 0.1)
-        tau_base: Base anomaly threshold (default 2.0)
+        tau_base: Base anomaly threshold (default 1.2)
         beta: Threshold flexibility factor (default 0.5)
         window_size: History window size (default 5)
-        weights: Anomaly dimension weights (default equal)
+        weights: Anomaly dimension weights (default (0.5, 0.3, 0.2) for mag, dir, temp)
 
     Cold-Start Mitigation Parameters:
-        warmup_rounds: Number of rounds to use conservative thresholds (default 5)
-        warmup_factor: Multiplier for stricter warmup threshold (default 0.5)
-        min_rounds_for_trust: Minimum rounds before reliability can increase (default 3)
+        warmup_rounds: Number of rounds to use conservative thresholds (default 10)
+        warmup_factor: Multiplier for stricter warmup threshold (default 0.3)
+        min_rounds_for_trust: Minimum rounds before reliability can increase (default 5)
         use_cross_comparison: Enable cross-client gradient comparison (default True)
         use_population_init: Initialize profiles from population stats (default True)
-        new_client_weight: Weight multiplier for new clients (default 0.5)
+        new_client_weight: Weight multiplier for new clients (default 0.3)
     """
 
     def __init__(self,
@@ -552,7 +557,7 @@ class CAACFLAggregator:
 
         # Cold-start mitigation 1: Conservative warmup period
         # During warmup, use stricter (lower) thresholds for everyone
-        if self.current_round < self.warmup_rounds:
+        if self.warmup_rounds > 0 and self.current_round < self.warmup_rounds:
             # warmup_factor < 1 means stricter threshold
             # Gradually relax as we approach end of warmup
             warmup_progress = self.current_round / self.warmup_rounds
