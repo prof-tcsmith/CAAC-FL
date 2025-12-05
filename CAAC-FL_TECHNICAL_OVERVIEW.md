@@ -470,17 +470,153 @@ CAACFLAggregator(
 
 ### 8.1 Known Limitations
 
-1. **Slow-drift attacks**: Attackers who gradually shift behavior may evade temporal detection
-2. **Colluding Byzantine clients**: Multiple attackers coordinating could manipulate cross-client comparisons
-3. **Scalability**: Storing per-client profiles may be challenging with thousands of participants
-4. **Privacy risks**: Detailed behavioral profiles could potentially leak information
+#### 8.1.1 Aggregate Granularity: The Sparse Attack Vulnerability
 
-### 8.2 Future Directions
+CAAC-FL operates on **flattened gradient vectors**, computing a single norm and cosine similarity across all model parameters. This design choice has important implications:
 
-1. **Differential privacy integration**: Add noise to profiles to prevent information leakage
-2. **Hierarchical aggregation**: Cluster similar clients for scalability
-3. **Formal convergence guarantees**: Theoretical analysis of convergence under Byzantine attacks
-4. **Cross-domain validation**: Extend beyond healthcare to financial services, mobile FL, etc.
+**How it works:**
+```
+gradient = [layer1_weights, layer1_bias, layer2_weights, ...] → single 1D vector
+norm = ||gradient||₂  → single scalar
+cosine_sim = cos(gradient_current, gradient_history) → single scalar
+```
+
+**What this catches:**
+| Attack Type | Detection Mechanism | Effectiveness |
+|------------|---------------------|---------------|
+| Large random noise | Magnitude anomaly | ✓ Strong |
+| Sign flipping | Directional anomaly (cos ≈ -1) | ✓ Strong |
+| Scaling attacks | Magnitude anomaly | ✓ Strong |
+| ALIE (variance-aware) | Temporal + magnitude | ✓ Moderate |
+
+**What this may miss:**
+| Attack Type | Why It's Missed | Example |
+|------------|-----------------|---------|
+| Targeted layer attacks | Final layer may be <1% of params; aggregate norm barely changes | Poisoning only classification head |
+| Sparse critical attacks | Aggregate statistics dominated by unchanged weights | Modifying 10 critical neurons in 10M params |
+| Surgical backdoors | Small perturbations to specific feature detectors | Backdoor triggers in early conv layers |
+
+**Illustrative example**: In a 10,000-weight network, if an attacker:
+- Keeps 9,990 weights identical to honest behavior
+- Massively corrupts 10 critical classification weights
+
+The aggregate metrics remain nearly normal:
+- Norm: √(9990 × normal² + 10 × malicious²) ≈ √(9990 × normal²)
+- Cosine: Dominated by 9,990 aligned components → high similarity
+
+**Comparison with layer-aware approaches (LASA):**
+| Aspect | CAAC-FL (Aggregate) | LASA (Per-Layer) |
+|--------|---------------------|------------------|
+| Storage per client | O(W × P) | O(W × L) where L = layers |
+| Catches layer attacks | ✗ | ✓ |
+| Client-specific baselines | ✓ | ✗ |
+| Catches aggregate attacks | ✓ | ✓ |
+
+A hybrid approach tracking per-layer statistics with client-specific baselines could address this gap but would increase complexity.
+
+#### 8.1.2 Server Memory Requirements
+
+CAAC-FL maintains per-client profiles on the server. The memory footprint depends heavily on model size and number of clients.
+
+**Per-client storage breakdown:**
+| Component | Size | Formula |
+|-----------|------|---------|
+| μ (EWMA mean) | 8 bytes | 1 float64 |
+| σ (EWMA std) | 8 bytes | 1 float64 |
+| reliability | 8 bytes | 1 float64 |
+| round_count | 8 bytes | 1 int64 |
+| sigma_history | W × 8 bytes | Window × float64 |
+| **gradient_history** | **W × P × 8 bytes** | **Window × Params × float64** |
+
+The gradient history dominates: **Memory per client ≈ W × P × 8 bytes**
+
+**Memory requirements for different model scales (W=10 history window):**
+
+| Model | Parameters | Per Client | 10 Clients | 100 Clients | 1000 Clients |
+|-------|------------|------------|------------|-------------|--------------|
+| Small CNN | 100K | 8 MB | 80 MB | 800 MB | 8 GB |
+| ResNet-18 | 11M | 880 MB | 8.8 GB | 88 GB | 880 GB |
+| ResNet-50 | 25M | 2 GB | 20 GB | 200 GB | 2 TB |
+| VGG-16 | 138M | 11 GB | 110 GB | 1.1 TB | 11 TB |
+| GPT-2 | 117M | 9.4 GB | 94 GB | 940 GB | 9.4 TB |
+
+**Implications:**
+- **Small models (≤1M params)**: CAAC-FL is practical for hundreds of clients on commodity hardware
+- **Medium models (1-25M params)**: Requires high-memory servers or reduced history windows
+- **Large models (>100M params)**: Current design is impractical; requires architectural changes
+
+#### 8.1.3 Server Computation Requirements
+
+**Per-round computation per client:**
+| Operation | Complexity | Notes |
+|-----------|------------|-------|
+| Flatten gradient | O(P) | Single pass over parameters |
+| Compute norm | O(P) | Single reduction |
+| Magnitude anomaly | O(1) | Simple arithmetic |
+| Directional anomaly | O(W × P) | W cosine similarities, each O(P) |
+| Cross-client comparison | O(N × P) | N-1 cosine similarities |
+| Temporal anomaly | O(1) | Simple arithmetic |
+| EWMA updates | O(1) | Simple arithmetic |
+| Store gradient | O(P) | Memory copy |
+
+**Total per round: O(N × P × (W + N))** where N=clients, P=params, W=window
+
+**Estimated wall-clock time (single-threaded, modern CPU):**
+
+| Model | Params | 10 Clients | 100 Clients |
+|-------|--------|------------|-------------|
+| Small CNN | 100K | ~10 ms | ~1 sec |
+| ResNet-18 | 11M | ~1 sec | ~2 min |
+| ResNet-50 | 25M | ~3 sec | ~5 min |
+
+**Parallelization opportunities:**
+- Cross-client comparisons are embarrassingly parallel
+- Per-client processing is independent
+- Cosine similarities can use BLAS-optimized dot products
+- GPU acceleration possible for large-scale deployments
+
+With proper parallelization, ResNet-18 with 100 clients should complete in seconds, not minutes.
+
+#### 8.1.4 Other Limitations
+
+5. **Slow-drift attacks**: Attackers who gradually shift behavior may evade temporal detection by staying within the EWMA adaptation rate
+
+6. **Colluding Byzantine clients**: Multiple attackers coordinating could manipulate cross-client comparisons by appearing similar to each other
+
+7. **Privacy risks**: Detailed behavioral profiles (gradient histories, reliability scores) could potentially leak information about client data distributions
+
+8. **Cold-start vulnerability window**: Despite mitigations, the first few rounds remain vulnerable to sophisticated attackers who understand the warmup mechanics
+
+### 8.2 Potential Mitigations (Not Yet Implemented)
+
+#### For Aggregate Granularity:
+1. **Layer-aware profiling**: Track per-layer statistics while maintaining client-specific baselines
+2. **Critical layer weighting**: Weight anomaly contributions by layer importance (e.g., final layers weighted higher)
+3. **Gradient component analysis**: Use PCA or random projections to detect anomalies in subspaces
+
+#### For Memory Scalability:
+1. **Gradient sketching**: Use count-min sketches or SimHash to compress gradient history
+2. **Quantized storage**: Store gradient history in int8/int16 instead of float64 (8-16× reduction)
+3. **Direction-only storage**: Store unit vectors (gradient/||gradient||) instead of full gradients
+4. **Rolling statistics**: Replace explicit history with sufficient statistics (e.g., covariance matrices)
+5. **Hierarchical profiles**: Cluster similar clients and maintain group-level profiles
+
+#### For Computation:
+1. **Approximate cosine similarity**: Use locality-sensitive hashing for approximate nearest-neighbor comparisons
+2. **Sampling-based comparison**: Compare with random subset of history/clients instead of all
+3. **GPU acceleration**: Implement core operations in CUDA for parallel execution
+
+### 8.3 Future Research Directions
+
+1. **Differential privacy integration**: Add calibrated noise to profiles to prevent information leakage while maintaining detection capability
+
+2. **Formal convergence guarantees**: Theoretical analysis of convergence rates under Byzantine attacks with CAAC-FL aggregation
+
+3. **Adaptive window sizing**: Dynamically adjust history window based on client stability and available memory
+
+4. **Cross-domain validation**: Extend evaluation beyond healthcare to financial services, mobile FL, autonomous vehicles
+
+5. **Hybrid detection architectures**: Combine aggregate CAAC-FL with layer-aware detection for comprehensive coverage
 
 ---
 
