@@ -47,7 +47,7 @@ The Byzantine problem becomes particularly acute in healthcare due to **data het
                     └───────────────────────┘
 ```
 
-**The fundamental problem**: Pediatric hospitals generate fundamentally different gradient updates than geriatric centers. This creates natural statistical diversity that existing defenses **cannot distinguish from adversarial behavior**.
+**The fundamental problem**: Pediatric hospitals generate fundamentally different gradient updates than geriatric centers. This data heterogeneity creates natural statistical diversity that **distance-based defenses (Krum) and statistical filtering methods (Trimmed Mean) struggle to distinguish** from adversarial behavior, as they rely on population-level statistics that penalize legitimate outliers.
 
 ### 1.3 Empirical Evidence of the Problem
 
