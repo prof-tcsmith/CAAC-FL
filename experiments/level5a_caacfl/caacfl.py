@@ -138,6 +138,7 @@ class ClientProfile:
 
     Attributes:
         client_id: Unique identifier for this client
+        window_size: Number of historical gradients to store (determines deque maxlen)
         mu: EWMA mean of gradient magnitudes
         sigma: EWMA standard deviation of gradient magnitudes
         reliability: Trust score based on past behavior [0, 1]
@@ -146,12 +147,19 @@ class ClientProfile:
         round_count: Number of rounds this client has participated
     """
     client_id: int
+    window_size: int = 5  # Default matches CAACFLAggregator.window_size
     mu: float = 0.0
     sigma: float = 0.1  # Initial small value to avoid division by zero
     reliability: float = 0.5  # Start neutral
-    gradient_history: deque = field(default_factory=lambda: deque(maxlen=10))
-    sigma_history: deque = field(default_factory=lambda: deque(maxlen=10))
+    gradient_history: deque = field(default_factory=deque)
+    sigma_history: deque = field(default_factory=deque)
     round_count: int = 0
+
+    def __post_init__(self):
+        """Initialize deques with proper maxlen after dataclass creation."""
+        # Reinitialize deques with correct maxlen based on window_size
+        self.gradient_history = deque(self.gradient_history, maxlen=self.window_size)
+        self.sigma_history = deque(self.sigma_history, maxlen=self.window_size)
 
     def update_ewma(self, gradient_norm: float, alpha: float = 0.1):
         """
@@ -472,16 +480,19 @@ class CAACFLAggregator:
         # Track current round for warmup logic
         self.current_round = 0
 
+        # Store window_size for profile creation
+        self.window_size = window_size
+
         # Population statistics for profile initialization
         self.population_mu = None  # Will be computed from first round
         self.population_sigma = None
 
-        # Initialize per-client profiles
+        # Initialize per-client profiles with consistent window_size
         self.profiles: Dict[int, ClientProfile] = {
-            i: ClientProfile(client_id=i) for i in range(num_clients)
+            i: ClientProfile(client_id=i, window_size=window_size) for i in range(num_clients)
         }
 
-        # Anomaly detector
+        # Anomaly detector (uses same window_size for consistency)
         self.detector = AnomalyDetector(
             window_size=window_size,
             weights=weights,
